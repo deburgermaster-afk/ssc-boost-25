@@ -112,11 +112,10 @@ const math = make(
   },
   (k) => {
     const cqs = mCq.slice((k - 1) * 5, k * 5)
-    return cqs.flatMap((cq, i): BreakPage[] => [
-      { kind: "cq", title: "সৃজনশীল প্রশ্ন", cq, n: i + 1, of: cqs.length, parts: [0, 1], stem: true, link: false },
-      { kind: "cq", title: "সৃজনশীল প্রশ্ন", cq, n: i + 1, of: cqs.length, parts: [2], stem: false, link: false },
-      { kind: "cq", title: "সৃজনশীল প্রশ্ন", cq, n: i + 1, of: cqs.length, parts: [3], stem: false, link: false },
-    ])
+    // One scrollable page per CQ with the full worked solution.
+    return cqs.map(
+      (cq, i): BreakPage => ({ kind: "cq", title: "সৃজনশীল প্রশ্ন", cq, n: i + 1, of: cqs.length, parts: [0, 1, 2, 3], stem: true, link: false }),
+    )
   },
 )
 

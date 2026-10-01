@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { RichText } from "@/components/rich-text"
+import { RichBlock, RichText } from "@/components/rich-text"
 import {
   BLOCK,
   BREAKS,
@@ -348,9 +348,7 @@ function QuestionBody({ subject, q, n, label }: { subject: Subject; q: Mcq; n?: 
           <RichText text={q.passage} />
         </p>
       )}
-      <p className="mb-4 leading-relaxed font-semibold">
-        <RichText text={q.q} />
-      </p>
+      <RichBlock text={q.q} className="mb-4 leading-relaxed font-semibold" />
     </>
   )
 }
@@ -412,10 +410,12 @@ function Question({
   )
 }
 
-function Options({ q, mine }: { q: Mcq; mine: number | undefined }) {
+// `compact` (instant feedback) shows only the right answer and the chosen one,
+// leaving room for the worked explanation.
+function Options({ q, mine, compact }: { q: Mcq; mine: number | undefined; compact?: boolean }) {
   return (
     <div className="flex flex-col gap-2">
-      {q.opts.map((o, j) => (
+      {q.opts.map((o, j) => (compact && j !== q.a && j !== mine ? null : (
         <div
           key={j}
           className={cn(
@@ -434,7 +434,7 @@ function Options({ q, mine }: { q: Mcq; mine: number | undefined }) {
           {j === q.a && <span className="ml-auto shrink-0 text-xs">সঠিক</span>}
           {j === mine && j !== q.a && <span className="ml-auto shrink-0 text-xs">তোমার</span>}
         </div>
-      ))}
+      )))}
     </div>
   )
 }
@@ -442,9 +442,9 @@ function Options({ q, mine }: { q: Mcq; mine: number | undefined }) {
 function Explanation({ q }: { q: Mcq }) {
   if (!q.ex) return null
   return (
-    <div className="mt-3 border-l-2 border-black pl-3 leading-relaxed">
-      <p className="text-xs font-semibold text-neutral-500">ব্যাখ্যা</p>
-      <RichText text={q.ex} />
+    <div className="mt-3 border-l-2 border-black pl-3 leading-snug">
+      <p className="mb-0.5 text-xs font-semibold text-neutral-500">ব্যাখ্যা</p>
+      <RichBlock text={q.ex} />
     </div>
   )
 }
@@ -465,9 +465,9 @@ function Feedback({
   const right = choice === q.a
   return (
     <>
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", sizeFor(q, q.ex?.length ?? 0))}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto text-[14px]">
         <QuestionBody subject={subject} q={q} label={`প্রশ্ন ${bn(n)} · ${right ? "সঠিক ✓" : "ভুল ✗"}`} />
-        <Options q={q} mine={choice} />
+        <Options q={q} mine={choice} compact />
         <Explanation q={q} />
       </div>
       <Button className="mt-3 h-12 w-full shrink-0 text-base" onClick={onNext}>
@@ -494,6 +494,8 @@ function BreakView({ subject, page }: { subject: Subject; page: BreakPage }) {
     )
   }
   const { cq } = page
+  // Math CQs show the full worked solution in blue on one scrollable page.
+  const full = subject.instant
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto text-[14px] leading-snug">
       <p className="text-[11px] text-neutral-500">
@@ -502,7 +504,7 @@ function BreakView({ subject, page }: { subject: Subject; page: BreakPage }) {
       {page.stem ? (
         <div className="border-l-2 border-black pl-3 text-neutral-800">
           <p className="mb-0.5 text-[11px] font-semibold text-neutral-500">উদ্দীপক</p>
-          <RichText text={cq.stem} />
+          <RichBlock text={cq.stem} />
         </div>
       ) : (
         <p className="line-clamp-2 text-[12px] text-neutral-500">
@@ -516,12 +518,10 @@ function BreakView({ subject, page }: { subject: Subject; page: BreakPage }) {
             <p className="font-semibold">
               {LABELS[i]}. <RichText text={p.q} />
             </p>
-            <div className="mt-1 text-neutral-700">
-              <RichText text={p.a} />
-            </div>
+            <RichBlock text={p.a} className={cn("mt-1", full ? "text-blue-700" : "text-neutral-700")} />
             {p.tip && (
-              <div className="mt-2 rounded-md border border-dashed border-black px-3 py-2 text-[13px]">
-                <RichText text={p.tip} />
+              <div className={cn("mt-2 rounded-md border border-dashed px-3 py-2 text-[13px]", full ? "border-blue-700 text-blue-700" : "border-black")}>
+                <RichBlock text={p.tip} />
               </div>
             )}
           </div>

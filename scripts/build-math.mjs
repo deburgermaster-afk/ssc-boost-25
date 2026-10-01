@@ -4,6 +4,7 @@
 // solution is computed here, so answers are always arithmetically correct.
 // Text is Bangla; math is LaTeX between $…$ (rendered with KaTeX in the app).
 import fs from "node:fs"
+import { fig, legend, plain, tbl, vert, withLegend } from "./math-format.mjs"
 
 // ───────────────────────── helpers ─────────────────────────
 let seed = 9102017
@@ -44,14 +45,15 @@ const overRoot3 = (a) => (a % 3 === 0 ? radTex(a / 3, 3) : `\\frac{${a}}{\\sqrt{
 const mcq = []
 const seen = new Set()
 // Push an MCQ. `opts[0]` is the correct option; the rest are distractors.
-function add(ch, q, opts, ex) {
+// `leg` overrides the automatic "কোনটা কী ধরবে" legend.
+function add(ch, q, opts, ex, leg) {
   if (seen.has(q)) return false
   const uniq = [...new Set(opts)]
   if (uniq.length < 4) return false
   const four = [uniq[0], ...shuffle(uniq.slice(1)).slice(0, 3)]
   const order = shuffle([0, 1, 2, 3])
   seen.add(q)
-  mcq.push({ ch, q, opts: order.map((i) => four[i]), a: order.indexOf(0), ex })
+  mcq.push({ ch, q, opts: order.map((i) => four[i]), a: order.indexOf(0), ex, leg })
   return true
 }
 // Numeric options: correct + distractors, falling back to nearby values.
@@ -166,8 +168,9 @@ function fill(ch, fixed, templates) {
     const n = fs_.reduce((a, b) => a + b, 0)
     const sfx = xs.reduce((s, x, i) => s + x * fs_[i], 0)
     const m = sfx / n
-    const rows = xs.map((x, i) => `${x}\\,(${fs_[i]})`).join(",\\ ")
-    add(C, `একটি উপাত্তে মান (গণসংখ্যা): $${rows}$। গড় কত?`, numOpts(r2(m), [r2(xs.reduce((a, b) => a + b, 0) / 4), r2(sfx / 4), r2(m + 1)]), `$\\sum fx=${xs.map((x, i) => `${x}\\times${fs_[i]}`).join("+")}=${sfx}$, $n=\\sum f=${n}$; গড় $=\\frac{\\sum fx}{n}=\\frac{${sfx}}{${n}}=${dec(m)}$`)
+    const q = `নিচের সারণির উপাত্তের গাণিতিক গড় কত?\n${tbl([["মান $x$", ...xs], ["গণসংখ্যা $f$", ...fs_]])}`
+    const t = tbl([["$x$", "$f$", "$fx$"], ...xs.map((x, i) => [x, fs_[i], x * fs_[i]]), ["মোট", `$n=${n}$`, `$${sfx}$`]])
+    add(C, q, numOpts(r2(m), [r2(xs.reduce((a, b) => a + b, 0) / 4), r2(sfx / 4), r2(m + 1)]), `${t}\nগড় $\\bar x=\\frac{\\sum fx}{n}=\\frac{${sfx}}{${n}}=${dec(m)}$`)
   }
   const tNat = () => {
     const n = ri(5, 40)
@@ -211,8 +214,7 @@ function fill(ch, fixed, templates) {
     const mx = Math.max(...f)
     if (f.filter((x) => x === mx).length > 1) return
     const i = f.indexOf(mx)
-    const tab = cls.map((c, k) => `${c}:${f[k]}`).join(",\\ ")
-    add(C, `শ্রেণি:গণসংখ্যা — $${tab}$। প্রচুরক শ্রেণি কোনটি?`, [$(cls[i]), ...cls.filter((_, k) => k !== i).map($)], `সর্বোচ্চ গণসংখ্যা $${mx}$ যে শ্রেণিতে, সেটিই প্রচুরক শ্রেণি: $${cls[i]}$`)
+    add(C, `নিচের সারণির প্রচুরক শ্রেণি কোনটি?\n${tbl([["শ্রেণি", ...cls], ["গণসংখ্যা", ...f]])}`, [$(cls[i]), ...cls.filter((_, k) => k !== i).map($)], `সর্বোচ্চ গণসংখ্যা $${mx}$\nযে শ্রেণিতে গণসংখ্যা সবচেয়ে বেশি, সেটিই প্রচুরক শ্রেণি\nপ্রচুরক শ্রেণি $=${cls[i]}$`)
   }
   const tMedClass = () => {
     const { f, cls } = table()
@@ -221,8 +223,8 @@ function fill(ch, fixed, templates) {
     let i = 0
     const cf = f.map((x) => (cum += x))
     while (cf[i] < n / 2) i++
-    const tab = cls.map((c, k) => `${c}:${f[k]}`).join(",\\ ")
-    add(C, `শ্রেণি:গণসংখ্যা — $${tab}$। মধ্যক শ্রেণি কোনটি?`, [$(cls[i]), ...cls.filter((_, k) => k !== i).map($)], `$n=${n}$, $\\frac{n}{2}=${dec(n / 2)}$। ক্রমযোজিত গণসংখ্যা: $${cf.join(", ")}$। প্রথম যে শ্রেণিতে ক্রমযোজিত গণসংখ্যা $\\ge ${dec(n / 2)}$, সেটি মধ্যক শ্রেণি: $${cls[i]}$`)
+    const t = tbl([["শ্রেণি", "গণসংখ্যা", "ক্রমযোজিত"], ...cls.map((c, k) => [k === i ? `**${c}**` : c, f[k], k === i ? `**${cf[k]}**` : cf[k]])])
+    add(C, `নিচের সারণির মধ্যক শ্রেণি কোনটি?\n${tbl([["শ্রেণি", ...cls], ["গণসংখ্যা", ...f]])}`, [$(cls[i]), ...cls.filter((_, k) => k !== i).map($)], `${t}\n$n=${n}$, $\\frac{n}{2}=${dec(n / 2)}$\nপ্রথম যে শ্রেণিতে ক্রমযোজিত গণসংখ্যা $\\ge ${dec(n / 2)}$, সেটিই মধ্যক শ্রেণি\nমধ্যক শ্রেণি $=${cls[i]}$`)
   }
   fill(C, fixed, [tMean, tMedOdd, tMedEven, tMode, tRange, tClasses, tMid, tFreqMean, tNat, tShort, tMedFormula, tModeFormula, tModeClass, tMedClass])
 }
@@ -298,7 +300,7 @@ function fill(ch, fixed, templates) {
     const [n, d] = val[ask]
     const wrong = [[d, n], [a, b + c], [b, a + c], [a + b, c], [c, a + b]].map(([x, y]) => $(fr(x, y)))
     const fn = (f) => (f === "cosec" ? "\\operatorname{cosec}" : `\\${f}`)
-    add(C, `$${fn(givenKind)}\\theta=${fr(...given)}$ হলে $${fn(ask)}\\theta$ এর মান কত?`, [$(fr(n, d)), ...wrong], `লম্ব $=${a}$, ভূমি $=${b}$ ধরলে অতিভুজ $=\\sqrt{${a}^2+${b}^2}=${c}$ (পিথাগোরাস)। তাই $${fn(ask)}\\theta=${fr(n, d)}$`)
+    add(C, `$${fn(givenKind)}\\theta=${fr(...given)}$ হলে $${fn(ask)}\\theta$ এর মান কত?`, [$(fr(n, d)), ...wrong], `${fig({ t: "rt", a: `লম্ব ${a}`, b: `ভূমি ${b}`, c: `অতিভুজ ${c}`, ang: "θ" })}\nলম্ব $=${a}$, ভূমি $=${b}$ ধরি\nঅতিভুজ $=\\sqrt{${a}^2+${b}^2}=\\sqrt{${a * a + b * b}}=${c}$ (পিথাগোরাস)\nতাই $${fn(ask)}\\theta=${fr(n, d)}$`)
   }
   const eqs = [
     ["2\\cos\\theta=1", 60, "\\cos\\theta=\\frac{1}{2}=\\cos60^\\circ"],
@@ -362,7 +364,7 @@ function fill(ch, fixed, templates) {
     const nB = ri(10, 40)
     const nI = ri(2, Math.min(nA, nB) - 1)
     const v = nA + nB - nI
-    add(C, `$n(A)=${nA}$, $n(B)=${nB}$, $n(A\\cap B)=${nI}$ হলে $n(A\\cup B)$ কত?`, numOpts(v, [nA + nB, nA + nB + nI, v - nI]), `$n(A\\cup B)=n(A)+n(B)-n(A\\cap B)=${nA}+${nB}-${nI}=${v}$`)
+    add(C, `$n(A)=${nA}$, $n(B)=${nB}$, $n(A\\cap B)=${nI}$ হলে $n(A\\cup B)$ কত?`, numOpts(v, [nA + nB, nA + nB + nI, v - nI]), `${fig({ t: "venn", A: "A", B: "B", a: nA - nI, ab: nI, b: nB - nI })}\n$n(A\\cup B)=n(A)+n(B)-n(A\\cap B)=${nA}+${nB}-${nI}=${v}$`)
   }
   const tSurvey = () => {
     const N = ri(5, 12) * 10
@@ -371,7 +373,7 @@ function fill(ch, fixed, templates) {
     const c = ri(5, Math.min(a, b) - 2)
     const none = N - (a + b - c)
     if (none < 0) return
-    add(C, `${N} জন শিক্ষার্থীর মধ্যে ${a} জন ফুটবল, ${b} জন ক্রিকেট এবং ${c} জন উভয় খেলা পছন্দ করে। কতজন কোনোটিই পছন্দ করে না?`, numOpts(none, [N - a - b, a + b - c, N - c]), `অন্তত একটি পছন্দ করে $=${a}+${b}-${c}=${a + b - c}$; কোনোটিই নয় $=${N}-${a + b - c}=${none}$`)
+    add(C, `${N} জন শিক্ষার্থীর মধ্যে ${a} জন ফুটবল, ${b} জন ক্রিকেট এবং ${c} জন উভয় খেলা পছন্দ করে। কতজন কোনোটিই পছন্দ করে না?`, numOpts(none, [N - a - b, a + b - c, N - c]), `${fig({ t: "venn", A: "ফুটবল", B: "ক্রিকেট", a: a - c, ab: c, b: b - c, out: none, U: `মোট ${N}` })}\nঅন্তত একটি পছন্দ করে $=${a}+${b}-${c}=${a + b - c}$\nকোনোটিই নয় $=${N}-${a + b - c}=${none}$`)
   }
   const tBuilder = () => {
     const kind = pick(["factor", "square", "multiple"])
@@ -447,14 +449,14 @@ function fill(ch, fixed, templates) {
     const th = pick([30, 45, 60])
     const v = heightOf(d, th)
     const others = [30, 45, 60].filter((x) => x !== th).map((x) => heightOf(d, x))
-    add(C, `কোনো গাছের পাদদেশ থেকে $${d}$ মিটার দূরের একটি বিন্দুতে গাছের শীর্ষের উন্নতি কোণ $${th}^\\circ$। গাছের উচ্চতা কত মিটার?`, [$(v), ...others.map($), $(`${2 * d}`), $(radTex(d, 2))], `$\\tan${th}^\\circ=\\frac{h}{${d}}\\Rightarrow h=${d}\\tan${th}^\\circ=${v}$ মিটার`)
+    add(C, `কোনো গাছের পাদদেশ থেকে $${d}$ মিটার দূরের একটি বিন্দুতে গাছের শীর্ষের উন্নতি কোণ $${th}^\\circ$। গাছের উচ্চতা কত মিটার?`, [$(v), ...others.map($), $(`${2 * d}`), $(radTex(d, 2))], `${fig({ t: "elev", obj: "tree", h: "h", d: `${d} মি`, ang: `${th}°` })}\n$\\tan${th}^\\circ=\\frac{h}{${d}}\\Rightarrow h=${d}\\tan${th}^\\circ=${v}$ মিটার`)
   }
   const tD = () => {
     const h = pick(ds)
     const th = pick([30, 45, 60])
     const v = th === 45 ? `${h}` : th === 30 ? radTex(h, 3) : overRoot3(h)
     const alt = [30, 45, 60].filter((x) => x !== th).map((x) => (x === 45 ? `${h}` : x === 30 ? radTex(h, 3) : overRoot3(h)))
-    add(C, `$${h}$ মিটার উঁচু একটি দালানের ছাদ থেকে ভূমির একটি বিন্দুর অবনতি কোণ $${th}^\\circ$। দালানের পাদদেশ থেকে বিন্দুটির দূরত্ব কত মিটার?`, [$(v), ...alt.map($), $(`${2 * h}`)], `অবনতি কোণ = উন্নতি কোণ $=${th}^\\circ$; $\\tan${th}^\\circ=\\frac{${h}}{d}\\Rightarrow d=\\frac{${h}}{\\tan${th}^\\circ}=${v}$ মিটার`)
+    add(C, `$${h}$ মিটার উঁচু একটি দালানের ছাদ থেকে ভূমির একটি বিন্দুর অবনতি কোণ $${th}^\\circ$। দালানের পাদদেশ থেকে বিন্দুটির দূরত্ব কত মিটার?`, [$(v), ...alt.map($), $(`${2 * h}`)], `${fig({ t: "elev", down: true, h: `${h} মি`, d: "d", ang: `${th}°` })}\nঅবনতি কোণ = উন্নতি কোণ $=${th}^\\circ$ (একান্তর কোণ)\n$\\tan${th}^\\circ=\\frac{${h}}{d}\\Rightarrow d=\\frac{${h}}{\\tan${th}^\\circ}=${v}$ মিটার`)
   }
   const tLadder = () => {
     const l = pick([8, 10, 12, 14, 16, 18, 20, 24])
@@ -464,24 +466,24 @@ function fill(ch, fixed, templates) {
     const cosv = { 30: radTex(l / 2, 3), 45: `\\frac{${l}}{\\sqrt{2}}`, 60: `${l / 2}` }
     const v = askH ? sinv[th] : cosv[th]
     const w = askH ? cosv[th] : sinv[th]
-    add(C, `$${l}$ মিটার লম্বা একটি মই মাটির সাথে $${th}^\\circ$ কোণে দেয়ালে হেলান দিয়ে আছে। ${askH ? "মইটি দেয়ালের কত উচ্চতায় পৌঁছেছে" : "মইয়ের পাদদেশ দেয়াল থেকে কত দূরে"}?`, [$(v), $(w), $(`${l}`), $(radTex(l, 3)), $(`${2 * l}`)], askH ? `$\\sin${th}^\\circ=\\frac{h}{${l}}\\Rightarrow h=${l}\\sin${th}^\\circ=${v}$ মিটার` : `$\\cos${th}^\\circ=\\frac{d}{${l}}\\Rightarrow d=${l}\\cos${th}^\\circ=${v}$ মিটার`)
+    add(C, `$${l}$ মিটার লম্বা একটি মই মাটির সাথে $${th}^\\circ$ কোণে দেয়ালে হেলান দিয়ে আছে। ${askH ? "মইটি দেয়ালের কত উচ্চতায় পৌঁছেছে" : "মইয়ের পাদদেশ দেয়াল থেকে কত দূরে"}?`, [$(v), $(w), $(`${l}`), $(radTex(l, 3)), $(`${2 * l}`)], `${fig({ t: "rt", wall: true, a: "h", b: "d", c: `মই ${l} মি`, ang: `${th}°` })}\n` + (askH ? `$\\sin${th}^\\circ=\\frac{h}{${l}}\\Rightarrow h=${l}\\sin${th}^\\circ=${v}$ মিটার` : `$\\cos${th}^\\circ=\\frac{d}{${l}}\\Rightarrow d=${l}\\cos${th}^\\circ=${v}$ মিটার`))
   }
   const tShadow = () => {
     const h = pick(ds)
     const th = pick([30, 45, 60])
     const shadow = th === 45 ? `${h}` : th === 30 ? radTex(h, 3) : overRoot3(h)
-    add(C, `$${h}$ মিটার উঁচু খুঁটির ছায়ার দৈর্ঘ্য $${shadow}$ মিটার হলে সূর্যের উন্নতি কোণ কত?`, [`$${th}^\\circ$`, ...[30, 45, 60, 90].filter((x) => x !== th).map((x) => `$${x}^\\circ$`)], `$\\tan\\theta=\\frac{\\text{উচ্চতা}}{\\text{ছায়া}}=\\frac{${h}}{${shadow}}=${{ 30: "\\frac{1}{\\sqrt{3}}", 45: "1", 60: "\\sqrt{3}" }[th]}\\Rightarrow\\theta=${th}^\\circ$`)
+    add(C, `$${h}$ মিটার উঁচু খুঁটির ছায়ার দৈর্ঘ্য $${shadow}$ মিটার হলে সূর্যের উন্নতি কোণ কত?`, [`$${th}^\\circ$`, ...[30, 45, 60, 90].filter((x) => x !== th).map((x) => `$${x}^\\circ$`)], `${fig({ t: "elev", obj: "pole", h: `${h} মি`, d: `ছায়া ${plain(shadow)}`, ang: "θ" })}\n$\\tan\\theta=\\frac{\\text{উচ্চতা}}{\\text{ছায়া}}=\\frac{${h}}{${shadow}}=${{ 30: "\\frac{1}{\\sqrt{3}}", 45: "1", 60: "\\sqrt{3}" }[th]}\\Rightarrow\\theta=${th}^\\circ$`)
   }
   const tTwo = () => {
     const d = pick([10, 20, 30, 40, 50, 60])
     const v = radTex(d / 2, 3)
-    add(C, `একটি মিনারের দিকে $${d}$ মিটার এগিয়ে গেলে শীর্ষের উন্নতি কোণ $30^\\circ$ থেকে $60^\\circ$ হয়। মিনারের উচ্চতা কত মিটার?`, [$(v), $(radTex(d, 3)), $(`${d}`), $(overRoot3(d)), $(`${d / 2}`)], `কাছের বিন্দুর দূরত্ব $x$ হলে $h=x\\sqrt{3}$ এবং $h=\\frac{x+${d}}{\\sqrt{3}}$। সমান করে $3x=x+${d}\\Rightarrow x=${d / 2}$; $h=${d / 2}\\sqrt{3}=${v}$ মিটার`)
+    add(C, `একটি মিনারের দিকে $${d}$ মিটার এগিয়ে গেলে শীর্ষের উন্নতি কোণ $30^\\circ$ থেকে $60^\\circ$ হয়। মিনারের উচ্চতা কত মিটার?`, [$(v), $(radTex(d, 3)), $(`${d}`), $(overRoot3(d)), $(`${d / 2}`)], `${fig({ t: "elev2", h: "h", x: "x", d: `${d} মি`, a1: "30°", a2: "60°" })}\nকাছের বিন্দু থেকে পাদদেশের দূরত্ব $x$ ধরি\n$\\tan60^\\circ=\\frac{h}{x}\\Rightarrow h=x\\sqrt{3}$ …(১)\n$\\tan30^\\circ=\\frac{h}{x+${d}}\\Rightarrow h=\\frac{x+${d}}{\\sqrt{3}}$ …(২)\n(১) ও (২) সমান করে $x\\sqrt3=\\frac{x+${d}}{\\sqrt3}\\Rightarrow 3x=x+${d}\\Rightarrow 2x=${d}\\Rightarrow x=${d / 2}$\n$h=x\\sqrt{3}=${v}$ মিটার`)
   }
   const tBroken = () => {
     const x = pick([5, 6, 8, 10, 12, 15])
     const th = pick([30, 60])
     const v = th === 30 ? radTex(x, 3) : `${x}(2+\\sqrt{3})`
-    add(C, `একটি গাছ ঝড়ে ভেঙে গিয়ে ভাঙা অংশ দাঁড়ানো অংশের সাথে লেগে থেকে গোড়া থেকে $${x}$ মিটার দূরে মাটিতে $${th}^\\circ$ কোণ উৎপন্ন করে। গাছটির পূর্ণ উচ্চতা কত মিটার?`, [$(v), $(th === 30 ? `${x}(2+\\sqrt{3})` : radTex(x, 3)), $(`${2 * x}`), $(overRoot3(x)), $(radTex(x, 2))], `দাঁড়ানো অংশ $=${x}\\tan${th}^\\circ$, ভাঙা অংশ $=${x}\\sec${th}^\\circ$। মোট $=${x}(\\tan${th}^\\circ+\\sec${th}^\\circ)=${th === 30 ? `${x}\\left(\\frac{1}{\\sqrt3}+\\frac{2}{\\sqrt3}\\right)=${x}\\sqrt{3}` : `${x}(\\sqrt3+2)`}$ মিটার`)
+    add(C, `একটি গাছ ঝড়ে ভেঙে গিয়ে ভাঙা অংশ দাঁড়ানো অংশের সাথে লেগে থেকে গোড়া থেকে $${x}$ মিটার দূরে মাটিতে $${th}^\\circ$ কোণ উৎপন্ন করে। গাছটির পূর্ণ উচ্চতা কত মিটার?`, [$(v), $(th === 30 ? `${x}(2+\\sqrt{3})` : radTex(x, 3)), $(`${2 * x}`), $(overRoot3(x)), $(radTex(x, 2))], `${fig({ t: "rt", tree: true, a: "দাঁড়ানো অংশ", c: "ভাঙা অংশ", b: `${x} মি`, ang: `${th}°` })}\nদাঁড়ানো অংশ $=${x}\\tan${th}^\\circ$, ভাঙা অংশ $=${x}\\sec${th}^\\circ$। মোট $=${x}(\\tan${th}^\\circ+\\sec${th}^\\circ)=${th === 30 ? `${x}\\left(\\frac{1}{\\sqrt3}+\\frac{2}{\\sqrt3}\\right)=${x}\\sqrt{3}` : `${x}(\\sqrt3+2)`}$ মিটার`)
   }
   fill(C, fixed, [tH, tH, tD, tLadder, tLadder, tShadow, tTwo, tBroken])
 }
@@ -528,7 +530,7 @@ function fill(ch, fixed, templates) {
   const tCompound = () => {
     const [a, b, c, d] = [ri(1, 9), ri(1, 9), ri(1, 9), ri(1, 9)]
     if (a * c === b * d) return
-    add(C, `$${a}:${b}$ ও $${c}:${d}$ এর যৌগিক অনুপাত কোনটি?`, [$(R(a * c, b * d)), $(R(a + c, b + d)), $(R(a * d, b * c)), $(R(b * d, a * c))], `যৌগিক অনুপাত = পূর্বপদের গুণফল : উত্তরপদের গুণফল $=${a}\\times${c}:${b}\\times${d}=${R(a * c, b * d)}$`)
+    add(C, `$${a}:${b}$ ও $${c}:${d}$ এর যৌগিক অনুপাত কোনটি?`, [$(R(a * c, b * d)), $(R(a + c, b + d)), $(R(a * d, b * c)), $(R(b * d, a * c))], `যৌগিক অনুপাত = (পূর্বপদের গুণফল) : (উত্তরপদের গুণফল)\nযৌগিক অনুপাত $=${a}\\times${c}:${b}\\times${d}=${a * c}:${b * d}=${R(a * c, b * d)}$`)
   }
   const tMean = () => {
     const k = ri(1, 4)
@@ -687,49 +689,49 @@ function fill(ch, fixed, templates) {
     const [l, b, dg] = [p * k, q * k, h * k]
     const kind = pick(["area", "per", "diag"])
     const v = { area: l * b, per: 2 * (l + b), diag: dg }[kind]
-    add(C, `একটি আয়তক্ষেত্রের দৈর্ঘ্য $${l}$ সেমি ও প্রস্থ $${b}$ সেমি। এর ${{ area: "ক্ষেত্রফল (বর্গ সেমি)", per: "পরিসীমা (সেমি)", diag: "কর্ণের দৈর্ঘ্য (সেমি)" }[kind]} কত?`, numOpts(v, [l * b, 2 * (l + b), dg, l + b].filter((x) => x !== v)), { area: `ক্ষেত্রফল $=\\text{দৈর্ঘ্য}\\times\\text{প্রস্থ}=${l}\\times${b}=${l * b}$`, per: `পরিসীমা $=2(\\text{দৈর্ঘ্য}+\\text{প্রস্থ})=2(${l}+${b})=${2 * (l + b)}$`, diag: `কর্ণ $=\\sqrt{${l}^2+${b}^2}=\\sqrt{${l * l + b * b}}=${dg}$` }[kind])
+    add(C, `একটি আয়তক্ষেত্রের দৈর্ঘ্য $${l}$ সেমি ও প্রস্থ $${b}$ সেমি। এর ${{ area: "ক্ষেত্রফল (বর্গ সেমি)", per: "পরিসীমা (সেমি)", diag: "কর্ণের দৈর্ঘ্য (সেমি)" }[kind]} কত?`, numOpts(v, [l * b, 2 * (l + b), dg, l + b].filter((x) => x !== v)), fig({ t: "rect", l: `${l} সেমি`, b: `${b} সেমি`, diag: kind === "diag" }) + "\n" + { area: `ক্ষেত্রফল $=\\text{দৈর্ঘ্য}\\times\\text{প্রস্থ}=${l}\\times${b}=${l * b}$`, per: `পরিসীমা $=2(\\text{দৈর্ঘ্য}+\\text{প্রস্থ})=2(${l}+${b})=${2 * (l + b)}$`, diag: `কর্ণ $=\\sqrt{${l}^2+${b}^2}=\\sqrt{${l * l + b * b}}=${dg}$` }[kind], [])
   }
   const tSquare = () => {
     const a = ri(3, 20)
-    add(C, `একটি বর্গের বাহু $${a}$ সেমি হলে কর্ণের দৈর্ঘ্য কত সেমি?`, [$(radTex(a, 2)), $(radTex(a, 3)), $(`${2 * a}`), $(`${a * a}`)], `কর্ণ $=\\sqrt{a^2+a^2}=a\\sqrt2=${radTex(a, 2)}$`)
+    add(C, `একটি বর্গের বাহু $${a}$ সেমি হলে কর্ণের দৈর্ঘ্য কত সেমি?`, [$(radTex(a, 2)), $(radTex(a, 3)), $(`${2 * a}`), $(`${a * a}`)], `${fig({ t: "rect", l: `${a} সেমি`, b: `${a} সেমি`, sq: true, diag: true })}\nকর্ণ $=\\sqrt{a^2+a^2}=a\\sqrt2=${radTex(a, 2)}$`, ["$a$ = বর্গের এক বাহুর দৈর্ঘ্য"])
   }
   const tEqui = () => {
     const a = pick([2, 4, 6, 8, 10, 12])
     const v = radTex((a * a) / 4, 3)
-    add(C, `একটি সমবাহু ত্রিভুজের বাহু $${a}$ সেমি হলে ক্ষেত্রফল কত বর্গ সেমি?`, [$(v), $(radTex((a * a) / 2, 3)), $(`${(a * a) / 2}`), $(radTex(a, 3))], `$\\frac{\\sqrt3}{4}a^2=\\frac{\\sqrt3}{4}\\times${a * a}=${v}$`)
+    add(C, `একটি সমবাহু ত্রিভুজের বাহু $${a}$ সেমি হলে ক্ষেত্রফল কত বর্গ সেমি?`, [$(v), $(radTex((a * a) / 2, 3)), $(`${(a * a) / 2}`), $(radTex(a, 3))], `${fig({ t: "tri", eq: true, a: a, b: a, c: a })}\nক্ষেত্রফল $=\\frac{\\sqrt3}{4}a^2=\\frac{\\sqrt3}{4}\\times${a}^2=\\frac{\\sqrt3}{4}\\times${a * a}=${v}$`, ["$a$ = সমবাহু ত্রিভুজের এক বাহু"])
   }
   const tHeron = () => {
     const k = ri(1, 3)
     const [a, b, c] = [13 * k, 14 * k, 15 * k]
     const s = 21 * k
     const A = 84 * k * k
-    add(C, `একটি ত্রিভুজের বাহুগুলো $${a}, ${b}, ${c}$ সেমি। এর ক্ষেত্রফল কত বর্গ সেমি?`, numOpts(A, [A / 2, (a * b) / 2, s * s].filter(Number.isInteger)), `$s=\\frac{${a}+${b}+${c}}{2}=${s}$; ক্ষেত্রফল $=\\sqrt{${s}(${s}-${a})(${s}-${b})(${s}-${c})}=\\sqrt{${s}\\cdot${s - a}\\cdot${s - b}\\cdot${s - c}}=${A}$`)
+    add(C, `একটি ত্রিভুজের বাহুগুলো $${a}, ${b}, ${c}$ সেমি। এর ক্ষেত্রফল কত বর্গ সেমি?`, numOpts(A, [A / 2, (a * b) / 2, s * s].filter(Number.isInteger)), `${fig({ t: "tri", a, b, c })}\n$s=\\frac{a+b+c}{2}=\\frac{${a}+${b}+${c}}{2}=${s}$\nক্ষেত্রফল $=\\sqrt{s(s-a)(s-b)(s-c)}=\\sqrt{${s}(${s}-${a})(${s}-${b})(${s}-${c})}=\\sqrt{${s}\\times${s - a}\\times${s - b}\\times${s - c}}=\\sqrt{${A * A}}=${A}$`, ["$a, b, c$ = ত্রিভুজের তিন বাহু", "$s$ = অর্ধপরিসীমা $=\\frac{a+b+c}{2}$"])
   }
   const tRightTri = () => {
     const b = ri(3, 20)
     const h = ri(3, 20)
     const v = (b * h) / 2
-    add(C, `একটি সমকোণী ত্রিভুজের সমকোণ সংলগ্ন বাহুদ্বয় $${b}$ সেমি ও $${h}$ সেমি। ক্ষেত্রফল কত বর্গ সেমি?`, numOpts(v, [b * h, b + h, v + 1]), `ক্ষেত্রফল $=\\frac12\\times\\text{ভূমি}\\times\\text{উচ্চতা}=\\frac12\\times${b}\\times${h}=${dec(v)}$`)
+    add(C, `একটি সমকোণী ত্রিভুজের সমকোণ সংলগ্ন বাহুদ্বয় $${b}$ সেমি ও $${h}$ সেমি। ক্ষেত্রফল কত বর্গ সেমি?`, numOpts(v, [b * h, b + h, v + 1]), `${fig({ t: "rt", a: `${h}`, b: `${b}` })}\nক্ষেত্রফল $=\\frac12\\times\\text{ভূমি}\\times\\text{উচ্চতা}=\\frac12\\times${b}\\times${h}=${dec(v)}$`, [])
   }
   const tCircle = () => {
     const r = ri(2, 14)
     const kind = pick(["area", "circ"])
-    if (kind === "area") add(C, `একটি বৃত্তের ব্যাসার্ধ $${r}$ সেমি হলে ক্ষেত্রফল কত বর্গ সেমি?`, [$(`${r * r}\\pi`), $(`${2 * r}\\pi`), $(`${r * r * 2}\\pi`), $(`${r}\\pi`)], `ক্ষেত্রফল $=\\pi r^2=\\pi\\times${r}^2=${r * r}\\pi$`)
-    else add(C, `একটি বৃত্তের ব্যাসার্ধ $${r}$ সেমি হলে পরিধি কত সেমি?`, [$(`${2 * r}\\pi`), $(`${r * r}\\pi`), $(`${r}\\pi`), $(`${4 * r}\\pi`)], `পরিধি $=2\\pi r=2\\pi\\times${r}=${2 * r}\\pi$`)
+    if (kind === "area") add(C, `একটি বৃত্তের ব্যাসার্ধ $${r}$ সেমি হলে ক্ষেত্রফল কত বর্গ সেমি?`, [$(`${r * r}\\pi`), $(`${2 * r}\\pi`), $(`${r * r * 2}\\pi`), $(`${r}\\pi`)], `${fig({ t: "circle", r: `${r} সেমি` })}\nক্ষেত্রফল $=\\pi r^2=\\pi\\times${r}^2=${r * r}\\pi$`, ["$r$ = ব্যাসার্ধ (কেন্দ্র থেকে পরিধি পর্যন্ত)", "$\\pi\\approx3.1416$"])
+    else add(C, `একটি বৃত্তের ব্যাসার্ধ $${r}$ সেমি হলে পরিধি কত সেমি?`, [$(`${2 * r}\\pi`), $(`${r * r}\\pi`), $(`${r}\\pi`), $(`${4 * r}\\pi`)], `${fig({ t: "circle", r: `${r} সেমি` })}\nপরিধি $=2\\pi r=2\\pi\\times${r}=${2 * r}\\pi$`, ["$r$ = ব্যাসার্ধ", "$\\pi\\approx3.1416$"])
   }
   const tRhombus = () => {
     const [p, q, h] = pick([[3, 4, 5], [5, 12, 13], [8, 15, 17], [6, 8, 10]])
     const [d1, d2] = [2 * p, 2 * q]
     const kind = pick(["area", "side"])
-    if (kind === "area") add(C, `একটি রম্বসের কর্ণদ্বয় $${d1}$ সেমি ও $${d2}$ সেমি। এর ক্ষেত্রফল কত বর্গ সেমি?`, numOpts((d1 * d2) / 2, [d1 * d2, d1 + d2, (d1 * d2) / 4]), `ক্ষেত্রফল $=\\frac12 d_1d_2=\\frac12\\times${d1}\\times${d2}=${(d1 * d2) / 2}$`)
-    else add(C, `একটি রম্বসের কর্ণদ্বয় $${d1}$ সেমি ও $${d2}$ সেমি। এর এক বাহুর দৈর্ঘ্য কত সেমি?`, numOpts(h, [h * 2, (d1 + d2) / 2, p + q]), `কর্ণদ্বয় পরস্পরকে লম্বভাবে সমদ্বিখণ্ডিত করে: বাহু $=\\sqrt{${p}^2+${q}^2}=${h}$`)
+    if (kind === "area") add(C, `একটি রম্বসের কর্ণদ্বয় $${d1}$ সেমি ও $${d2}$ সেমি। এর ক্ষেত্রফল কত বর্গ সেমি?`, numOpts((d1 * d2) / 2, [d1 * d2, d1 + d2, (d1 * d2) / 4]), `${fig({ t: "rhombus", d1: d1, d2: d2 })}\nক্ষেত্রফল $=\\frac12 d_1d_2=\\frac12\\times${d1}\\times${d2}=${(d1 * d2) / 2}$`, ["$d_1, d_2$ = রম্বসের দুই কর্ণ"])
+    else add(C, `একটি রম্বসের কর্ণদ্বয় $${d1}$ সেমি ও $${d2}$ সেমি। এর এক বাহুর দৈর্ঘ্য কত সেমি?`, numOpts(h, [h * 2, (d1 + d2) / 2, p + q]), `${fig({ t: "rhombus", d1: d1, d2: d2, side: "?" })}\nকর্ণদ্বয় পরস্পরকে লম্বভাবে সমদ্বিখণ্ডিত করে\nঅর্ধ-কর্ণ: $\\frac{${d1}}{2}=${p}$ ও $\\frac{${d2}}{2}=${q}$\nবাহু $=\\sqrt{${p}^2+${q}^2}=\\sqrt{${p * p + q * q}}=${h}$`, ["বাহু = দুই অর্ধ-কর্ণ দিয়ে গঠিত সমকোণী ত্রিভুজের অতিভুজ"])
   }
   const tTrap = () => {
     const a = ri(5, 20)
     const b = ri(5, 20)
     const h = ri(2, 10) * 2
     const v = ((a + b) * h) / 2
-    add(C, `একটি ট্রাপিজিয়ামের সমান্তরাল বাহুদ্বয় $${a}$ সেমি ও $${b}$ সেমি এবং উচ্চতা $${h}$ সেমি। ক্ষেত্রফল কত?`, numOpts(v, [(a + b) * h, a * b, v / 2].filter(Number.isInteger)), `$\\frac12(a+b)h=\\frac12(${a}+${b})\\times${h}=${v}$ বর্গ সেমি`)
+    add(C, `একটি ট্রাপিজিয়ামের সমান্তরাল বাহুদ্বয় $${a}$ সেমি ও $${b}$ সেমি এবং উচ্চতা $${h}$ সেমি। ক্ষেত্রফল কত?`, numOpts(v, [(a + b) * h, a * b, v / 2].filter(Number.isInteger)), `${fig({ t: "trap", a, b, h })}\nক্ষেত্রফল $=\\frac12(a+b)h=\\frac12(${a}+${b})\\times${h}=\\frac12\\times${a + b}\\times${h}=${v}$ বর্গ সেমি`, ["$a, b$ = সমান্তরাল বাহু দুটি", "$h$ = সমান্তরাল বাহুদ্বয়ের লম্ব দূরত্ব (উচ্চতা)"])
   }
   const tCuboid = () => {
     const [a, b, c, d] = pick([[2, 3, 6, 7], [1, 4, 8, 9], [2, 6, 9, 11], [3, 4, 12, 13], [4, 4, 7, 9], [6, 6, 7, 11]])
@@ -737,28 +739,28 @@ function fill(ch, fixed, templates) {
     const [l, w, h, dg] = [a * k, b * k, c * k, d * k]
     const kind = pick(["vol", "surf", "diag"])
     const v = { vol: l * w * h, surf: 2 * (l * w + w * h + h * l), diag: dg }[kind]
-    add(C, `একটি আয়তাকার ঘনবস্তুর দৈর্ঘ্য, প্রস্থ ও উচ্চতা যথাক্রমে $${l}, ${w}, ${h}$ সেমি। এর ${{ vol: "আয়তন (ঘন সেমি)", surf: "সমগ্রতলের ক্ষেত্রফল (বর্গ সেমি)", diag: "কর্ণের দৈর্ঘ্য (সেমি)" }[kind]} কত?`, numOpts(v, [l * w * h, 2 * (l * w + w * h + h * l), dg, l * w + w * h + h * l].filter((x) => x !== v)), { vol: `আয়তন $=abc=${l}\\times${w}\\times${h}=${v}$`, surf: `সমগ্রতল $=2(ab+bc+ca)=2(${l * w}+${w * h}+${h * l})=${v}$`, diag: `কর্ণ $=\\sqrt{${l}^2+${w}^2+${h}^2}=\\sqrt{${l * l + w * w + h * h}}=${dg}$` }[kind])
+    add(C, `একটি আয়তাকার ঘনবস্তুর দৈর্ঘ্য, প্রস্থ ও উচ্চতা যথাক্রমে $${l}, ${w}, ${h}$ সেমি। এর ${{ vol: "আয়তন (ঘন সেমি)", surf: "সমগ্রতলের ক্ষেত্রফল (বর্গ সেমি)", diag: "কর্ণের দৈর্ঘ্য (সেমি)" }[kind]} কত?`, numOpts(v, [l * w * h, 2 * (l * w + w * h + h * l), dg, l * w + w * h + h * l].filter((x) => x !== v)), fig({ t: "cuboid", l, w, h }) + "\n" + { vol: `আয়তন $=abc=${l}\\times${w}\\times${h}=${v}$`, surf: `সমগ্রতল $=2(ab+bc+ca)=2(${l * w}+${w * h}+${h * l})=${v}$`, diag: `কর্ণ $=\\sqrt{a^2+b^2+c^2}=\\sqrt{${l}^2+${w}^2+${h}^2}=\\sqrt{${l * l + w * w + h * h}}=${dg}$` }[kind], ["$a$ = দৈর্ঘ্য, $b$ = প্রস্থ, $c$ = উচ্চতা"])
   }
   const tCube = () => {
     const a = ri(2, 12)
     const kind = pick(["vol", "surf", "diag"])
-    if (kind === "diag") return add(C, `একটি ঘনকের ধার $${a}$ সেমি হলে কর্ণ কত সেমি?`, [$(radTex(a, 3)), $(radTex(a, 2)), $(`${3 * a}`), $(`${a * a}`)], `ঘনকের কর্ণ $=\\sqrt{3a^2}=a\\sqrt3=${radTex(a, 3)}$`)
+    if (kind === "diag") return add(C, `একটি ঘনকের ধার $${a}$ সেমি হলে কর্ণ কত সেমি?`, [$(radTex(a, 3)), $(radTex(a, 2)), $(`${3 * a}`), $(`${a * a}`)], `${fig({ t: "cuboid", l: a, w: a, h: a })}\nঘনকের কর্ণ $=\\sqrt{a^2+a^2+a^2}=\\sqrt{3a^2}=a\\sqrt3=${radTex(a, 3)}$`, ["$a$ = ঘনকের এক ধার"])
     const v = kind === "vol" ? a ** 3 : 6 * a * a
-    add(C, `একটি ঘনকের ধার $${a}$ সেমি হলে এর ${kind === "vol" ? "আয়তন (ঘন সেমি)" : "সমগ্রতলের ক্ষেত্রফল (বর্গ সেমি)"} কত?`, numOpts(v, [a ** 3, 6 * a * a, 4 * a * a, 3 * a * a].filter((x) => x !== v)), kind === "vol" ? `আয়তন $=a^3=${a}^3=${v}$` : `সমগ্রতল $=6a^2=6\\times${a * a}=${v}$`)
+    add(C, `একটি ঘনকের ধার $${a}$ সেমি হলে এর ${kind === "vol" ? "আয়তন (ঘন সেমি)" : "সমগ্রতলের ক্ষেত্রফল (বর্গ সেমি)"} কত?`, numOpts(v, [a ** 3, 6 * a * a, 4 * a * a, 3 * a * a].filter((x) => x !== v)), fig({ t: "cuboid", l: a, w: a, h: a }) + "\n" + (kind === "vol" ? `আয়তন $=a^3=${a}^3=${v}$` : `সমগ্রতল $=6a^2=6\\times${a}^2=6\\times${a * a}=${v}$`), ["$a$ = ঘনকের এক ধার"])
   }
   const tCyl = () => {
     const r = ri(2, 10)
     const h = ri(3, 15)
     const kind = pick(["vol", "curve", "total"])
     const v = { vol: `${r * r * h}\\pi`, curve: `${2 * r * h}\\pi`, total: `${2 * r * (r + h)}\\pi` }
-    add(C, `একটি সিলিন্ডারের ভূমির ব্যাসার্ধ $${r}$ সেমি ও উচ্চতা $${h}$ সেমি। এর ${{ vol: "আয়তন", curve: "বক্রতলের ক্ষেত্রফল", total: "সমগ্রতলের ক্ষেত্রফল" }[kind]} কত?`, [$(v[kind]), ...Object.keys(v).filter((x) => x !== kind).map((x) => $(v[x])), $(`${r * h}\\pi`)], { vol: `আয়তন $=\\pi r^2h=\\pi\\times${r * r}\\times${h}=${v.vol}$`, curve: `বক্রতল $=2\\pi rh=2\\pi\\times${r}\\times${h}=${v.curve}$`, total: `সমগ্রতল $=2\\pi r(r+h)=2\\pi\\times${r}(${r}+${h})=${v.total}$` }[kind])
+    add(C, `একটি সিলিন্ডারের ভূমির ব্যাসার্ধ $${r}$ সেমি ও উচ্চতা $${h}$ সেমি। এর ${{ vol: "আয়তন", curve: "বক্রতলের ক্ষেত্রফল", total: "সমগ্রতলের ক্ষেত্রফল" }[kind]} কত?`, [$(v[kind]), ...Object.keys(v).filter((x) => x !== kind).map((x) => $(v[x])), $(`${r * h}\\pi`)], fig({ t: "cyl", r, h }) + "\n" + { vol: `আয়তন $=\\pi r^2h=\\pi\\times${r * r}\\times${h}=${v.vol}$`, curve: `বক্রতল $=2\\pi rh=2\\pi\\times${r}\\times${h}=${v.curve}$`, total: `সমগ্রতল $=2\\pi r(r+h)=2\\pi\\times${r}(${r}+${h})=${v.total}$` }[kind], ["$r$ = ভূমির ব্যাসার্ধ", "$h$ = সিলিন্ডারের উচ্চতা"])
   }
   const tPath = () => {
     const l = ri(20, 60)
     const b = ri(10, l - 5)
     const w = ri(1, 4)
     const out = (l + 2 * w) * (b + 2 * w) - l * b
-    add(C, `$${l}$ মি × $${b}$ মি একটি বাগানের বাইরে চারদিকে $${w}$ মি চওড়া রাস্তা আছে। রাস্তার ক্ষেত্রফল কত বর্গমিটার?`, numOpts(out, [l * b - (l - 2 * w) * (b - 2 * w), 2 * w * (l + b), (l + 2 * w) * (b + 2 * w)]), `রাস্তাসহ $=(${l}+${2 * w})\\times(${b}+${2 * w})=${(l + 2 * w) * (b + 2 * w)}$; বাগান $=${l * b}$; রাস্তা $=${(l + 2 * w) * (b + 2 * w)}-${l * b}=${out}$`)
+    add(C, `$${l}$ মি × $${b}$ মি একটি বাগানের বাইরে চারদিকে $${w}$ মি চওড়া রাস্তা আছে। রাস্তার ক্ষেত্রফল কত বর্গমিটার?`, numOpts(out, [l * b - (l - 2 * w) * (b - 2 * w), 2 * w * (l + b), (l + 2 * w) * (b + 2 * w)]), `${fig({ t: "rect", l: `${l} মি`, b: `${b} মি`, w: `${w} মি`, path: "out" })}\nরাস্তাসহ দৈর্ঘ্য $=${l}+2\\times${w}=${l + 2 * w}$, প্রস্থ $=${b}+2\\times${w}=${b + 2 * w}$\nরাস্তাসহ ক্ষেত্রফল $=${l + 2 * w}\\times${b + 2 * w}=${(l + 2 * w) * (b + 2 * w)}$\nবাগানের ক্ষেত্রফল $=${l}\\times${b}=${l * b}$\nরাস্তার ক্ষেত্রফল $=${(l + 2 * w) * (b + 2 * w)}-${l * b}=${out}$ বর্গমিটার`, ["বাইরে রাস্তা: দৈর্ঘ্য ও প্রস্থে $2\\times$ রাস্তার চওড়া যোগ হয়"])
   }
   fill(C, fixed, [tRect, tSquare, tEqui, tHeron, tRightTri, tCircle, tRhombus, tTrap, tCuboid, tCube, tCyl, tPath])
 }
@@ -797,12 +799,18 @@ for (let t = 0; t < 6; t++) {
   const f1 = f[mi] - f[mi - 1]
   const f2 = f[mi] - f[mi + 1]
   const mode = Lo + (f1 / (f1 + f2)) * h
-  const tab = lo.map((x, i) => `${x}-${hi[i]}`).join(" | ")
-  CQ("m17", `কোনো শ্রেণির ${n} জন শিক্ষার্থীর প্রাপ্ত নম্বরের গণসংখ্যা নিবেশন সারণি:\nশ্রেণিব্যাপ্তি: ${tab}\nগণসংখ্যা: ${f.join(" | ")}`, [
-    part("সারণির শ্রেণিব্যবধান ও প্রচুরক শ্রেণি নির্ণয় করো।", `শ্রেণিব্যবধান $h=${hi[0]}-${lo[0]}+1=${h}$; সর্বোচ্চ গণসংখ্যা $${f[mi]}$, তাই প্রচুরক শ্রেণি $${lo[mi]}-${hi[mi]}$।`),
-    part("সংক্ষিপ্ত পদ্ধতিতে গড় নির্ণয় করো।", `আনুমানিক গড় $a=${a}$, $u_i=\\frac{x_i-${a}}{${h}}$: $${u.join(", ")}$\n$\\sum f_iu_i=${sfu}$, $n=${n}$\n$\\bar x=a+\\frac{\\sum f_iu_i}{n}\\times h=${a}+\\frac{${sfu}}{${n}}\\times${h}=${dec(mean)}$`),
-    part("মধ্যক নির্ণয় করো।", `ক্রমযোজিত গণসংখ্যা: $${cf.join(", ")}$\n$\\frac{n}{2}=${dec(n / 2)}$, তাই মধ্যক শ্রেণি $${lo[k]}-${hi[k]}$\n$L=${Lm}$ (প্রকৃত নিম্নসীমা), $F_c=${Fc}$, $f_m=${f[k]}$, $h=${h}$\nমধ্যক $=L+\\left(\\frac n2-F_c\\right)\\frac{h}{f_m}=${Lm}+(${dec(n / 2)}-${Fc})\\times\\frac{${h}}{${f[k]}}=${dec(med)}$`, `**সূত্র:** মধ্যক $=L+\\left(\\frac n2-F_c\\right)\\times\\frac{h}{f_m}$\n**কীভাবে চিনবে:** প্রশ্নে 'মধ্যক' আর সারণি শ্রেণিবিন্যস্ত হলেই এই সূত্র।\n**সহজ কৌশল:** ① ক্রমযোজিত গণসংখ্যার কলাম বানাও ② $\\frac n2$ যেখানে প্রথম ছাড়িয়ে যায় সেটাই মধ্যক শ্রেণি ③ তার আগের ক্রমযোজিত সংখ্যা $F_c$ ④ নিম্নসীমা থেকে $0.5$ বাদ দিয়ে $L$ ধরো।`),
-    part("প্রচুরক নির্ণয় করো।", `প্রচুরক শ্রেণি $${lo[mi]}-${hi[mi]}$, $L=${Lo}$\n$f_1=${f[mi]}-${f[mi - 1]}=${f1}$, $f_2=${f[mi]}-${f[mi + 1]}=${f2}$\nপ্রচুরক $=L+\\frac{f_1}{f_1+f_2}\\times h=${Lo}+\\frac{${f1}}{${f1 + f2}}\\times${h}=${dec(mode)}$`, `**সূত্র:** প্রচুরক $=L+\\frac{f_1}{f_1+f_2}\\times h$\n**কীভাবে চিনবে:** 'প্রচুরক' + শ্রেণিবিন্যস্ত সারণি।\n**সহজ কৌশল:** সবচেয়ে বড় গণসংখ্যার শ্রেণি বাছো; $f_1$ = এর থেকে **আগেরটা** বাদ, $f_2$ = এর থেকে **পরেরটা** বাদ। মনে রাখো: 'বড় − আগে, বড় − পরে'।`),
+  const cls = lo.map((x, i) => `${x}-${hi[i]}`)
+  const meanTable = tbl([
+    ["শ্রেণি", "$x_i$", "$f_i$", "$u_i$", "$f_iu_i$"],
+    ...cls.map((c, i) => [c, dec(mid[i]), f[i], u[i], u[i] * f[i]]),
+    ["মোট", "", `$${n}$`, "", `$${sfu}$`],
+  ])
+  const cfTable = tbl([["শ্রেণি", "$f_i$", "ক্রমযোজিত"], ...cls.map((c, i) => (i === k ? [`**${c}**`, `**${f[i]}**`, `**${cf[i]}**`] : [c, f[i], cf[i]]))])
+  CQ("m17", `কোনো শ্রেণির ${n} জন শিক্ষার্থীর প্রাপ্ত নম্বরের গণসংখ্যা নিবেশন সারণি:\n${tbl([["শ্রেণিব্যাপ্তি", "গণসংখ্যা"], ...cls.map((c, i) => [c, f[i]])])}`, [
+    part("সারণির শ্রেণিব্যবধান ও প্রচুরক শ্রেণি নির্ণয় করো।", `শ্রেণিব্যবধান $h=\\text{উচ্চসীমা}-\\text{নিম্নসীমা}+1=${hi[0]}-${lo[0]}+1=${h}$\nসর্বোচ্চ গণসংখ্যা $=${f[mi]}$\nতাই প্রচুরক শ্রেণি $=${cls[mi]}$`),
+    part("সংক্ষিপ্ত পদ্ধতিতে গড় নির্ণয় করো।", `আনুমানিক গড় $a=${a}$ ধরি (মাঝের দিকের একটি মধ্যমান), $h=${h}$\n$u_i=\\frac{x_i-a}{h}=\\frac{x_i-${a}}{${h}}$\n${meanTable}\n$\\bar x=a+\\frac{\\sum f_iu_i}{n}\\times h=${a}+\\frac{${sfu}}{${n}}\\times${h}=${a}+(${dec((sfu / n) * h)})=${dec(mean)}$`),
+    part("মধ্যক নির্ণয় করো।", `${cfTable}\n$\\frac{n}{2}=\\frac{${n}}{2}=${dec(n / 2)}$\n$${dec(n / 2)}$ যে শ্রেণির ক্রমযোজিত গণসংখ্যায় প্রথম পৌঁছায় সেটিই মধ্যক শ্রেণি $=${cls[k]}$\n$L=${lo[k]}-0.5=${Lm}$, $F_c=${Fc}$, $f_m=${f[k]}$, $h=${h}$\nমধ্যক $=L+\\left(\\frac n2-F_c\\right)\\times\\frac{h}{f_m}=${Lm}+(${dec(n / 2)}-${Fc})\\times\\frac{${h}}{${f[k]}}=${Lm}+${dec(((n / 2 - Fc) * h) / f[k])}=${dec(med)}$`, `**সূত্র:** মধ্যক $=L+\\left(\\frac n2-F_c\\right)\\times\\frac{h}{f_m}$\n**কীভাবে চিনবে:** প্রশ্নে 'মধ্যক' আর সারণি শ্রেণিবিন্যস্ত হলেই এই সূত্র।\n**সহজ কৌশল:** ① ক্রমযোজিত গণসংখ্যার কলাম বানাও ② $\\frac n2$ যেখানে প্রথম ছাড়িয়ে যায় সেটাই মধ্যক শ্রেণি ③ তার আগের ক্রমযোজিত সংখ্যা $F_c$ ④ নিম্নসীমা থেকে $0.5$ বাদ দিয়ে $L$ ধরো।`),
+    part("প্রচুরক নির্ণয় করো।", `সর্বোচ্চ গণসংখ্যা $${f[mi]}$, প্রচুরক শ্রেণি $=${cls[mi]}$\n$L=${lo[mi]}-0.5=${Lo}$, $h=${h}$\n$f_1=${f[mi]}-${f[mi - 1]}=${f1}$ (আগের শ্রেণি বাদ)\n$f_2=${f[mi]}-${f[mi + 1]}=${f2}$ (পরের শ্রেণি বাদ)\nপ্রচুরক $=L+\\frac{f_1}{f_1+f_2}\\times h=${Lo}+\\frac{${f1}}{${f1}+${f2}}\\times${h}=${Lo}+${dec((f1 / (f1 + f2)) * h)}=${dec(mode)}$`, `**সূত্র:** প্রচুরক $=L+\\frac{f_1}{f_1+f_2}\\times h$\n**কীভাবে চিনবে:** 'প্রচুরক' + শ্রেণিবিন্যস্ত সারণি।\n**সহজ কৌশল:** সবচেয়ে বড় গণসংখ্যার শ্রেণি বাছো; $f_1$ = এর থেকে **আগেরটা** বাদ, $f_2$ = এর থেকে **পরেরটা** বাদ। মনে রাখো: 'বড় − আগে, বড় − পরে'।`),
   ])
 }
 for (let t = 0; t < 2; t++) {
@@ -815,8 +823,8 @@ for (let t = 0; t < 2; t++) {
   CQ("m17", `১২ জন শ্রমিকের দৈনিক মজুরি (শত টাকায়): ${xs.join(", ")}`, [
     part("উপাত্তগুলোর পরিসর নির্ণয় করো।", `পরিসর $=(${mx}-${mn})+1=${mx - mn + 1}$`),
     part("উপাত্তগুলো ঊর্ধ্বক্রমে সাজাও।", `$${s.join(", ")}$`),
-    part("গাণিতিক গড় নির্ণয় করো।", `যোগফল $=${S}$, $n=12$\nগড় $=\\frac{${S}}{12}=${dec(S / 12)}$`, `**সূত্র:** গড় $=\\frac{\\sum x}{n}$\n**কীভাবে চিনবে:** অবিন্যস্ত (সারণি ছাড়া) উপাত্ত—সরাসরি যোগ করে ভাগ।\n**সহজ কৌশল:** ৩-৪টি করে দল বানিয়ে যোগ করো, ভুল কম হবে।`),
-    part("মধ্যক নির্ণয় করো।", `$n=12$ (জোড়), মধ্যক $=\\frac{6\\text{ষ্ঠ}+7\\text{ম পদ}}{2}=\\frac{${s[5]}+${s[6]}}{2}=${dec(med)}$`, `**সূত্র:** জোড় $n$ হলে মধ্যক $=\\frac{\\frac n2\\text{তম}+\\left(\\frac n2+1\\right)\\text{তম পদ}}{2}$\n**কীভাবে চিনবে:** অবিন্যস্ত উপাত্ত + মধ্যক।\n**সহজ কৌশল:** আগে **অবশ্যই** ক্রমানুসারে সাজাও, তারপর মাঝের দুটি সংখ্যার গড়।`),
+    part("গাণিতিক গড় নির্ণয় করো।", `যোগফল $\\sum x=${xs.join("+")}=${S}$\n$n=12$\nগড় $\\bar x=\\frac{\\sum x}{n}=\\frac{${S}}{12}=${dec(S / 12)}$`, `**সূত্র:** গড় $=\\frac{\\sum x}{n}$\n**কীভাবে চিনবে:** অবিন্যস্ত (সারণি ছাড়া) উপাত্ত—সরাসরি যোগ করে ভাগ।\n**সহজ কৌশল:** ৩-৪টি করে দল বানিয়ে যোগ করো, ভুল কম হবে।`),
+    part("মধ্যক নির্ণয় করো।", `ঊর্ধ্বক্রমে: $${s.join(", ")}$\n$n=12$ (জোড়), তাই মাঝের দুটি পদ $\\frac{12}{2}=6$ষ্ঠ ও $7$ম\n৬ষ্ঠ পদ $=${s[5]}$, ৭ম পদ $=${s[6]}$\nমধ্যক $=\\frac{${s[5]}+${s[6]}}{2}=\\frac{${s[5] + s[6]}}{2}=${dec(med)}$`, `**সূত্র:** জোড় $n$ হলে মধ্যক $=\\frac{\\frac n2\\text{তম}+\\left(\\frac n2+1\\right)\\text{তম পদ}}{2}$\n**কীভাবে চিনবে:** অবিন্যস্ত উপাত্ত + মধ্যক।\n**সহজ কৌশল:** আগে **অবশ্যই** ক্রমানুসারে সাজাও, তারপর মাঝের দুটি সংখ্যার গড়।`),
   ])
 }
 
@@ -832,13 +840,12 @@ const proofs = [
 for (let t = 0; t < 7; t++) {
   const [a, b, c] = pick([[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25]])
   const [pf, pp, ptip] = proofs[t % proofs.length]
-  const val1 = fr(c * c - a * a, b * b) // (sec²θ − tan²θ) check = 1; use (1+sinθ)(1−sinθ)… → cos²θ
   const sN = c + a
   const sD = c - a
-  CQ("m9", `$\\triangle ABC$-এ $\\angle B=90^\\circ$, $\\angle C=\\theta$ এবং $\\tan\\theta=\\frac{${a}}{${b}}$।`, [
-    part("$AC$ এর দৈর্ঘ্য $BC$-এর কত গুণ নির্ণয় করো।", `$AB=${a}k$, $BC=${b}k$ ধরলে $AC=\\sqrt{${a * a}k^2+${b * b}k^2}=${c}k$; তাই $AC=${fr(c, b)}\\,BC$`),
-    part("$\\sin\\theta$ ও $\\cos\\theta$ নির্ণয় করো।", `$\\sin\\theta=\\frac{\\text{লম্ব}}{\\text{অতিভুজ}}=\\frac{${a}}{${c}}$, $\\cos\\theta=\\frac{\\text{ভূমি}}{\\text{অতিভুজ}}=\\frac{${b}}{${c}}$`),
-    part(`$\\frac{1+\\sin\\theta}{1-\\sin\\theta}$ এর মান নির্ণয় করো।`, `$\\sin\\theta=\\frac{${a}}{${c}}$ বসাই:\n$\\frac{1+\\frac{${a}}{${c}}}{1-\\frac{${a}}{${c}}}=\\frac{${c}+${a}}{${c}-${a}}=${fr(sN, sD)}$\n(যাচাই: $1-\\sin^2\\theta=${val1}\\cos^2$-এর সমান অংশ)`, `**সূত্র:** $\\tan\\theta=\\frac{\\text{লম্ব}}{\\text{ভূমি}}$ থেকে বাহু ধরো, পিথাগোরাসে অতিভুজ।\n**কীভাবে চিনবে:** একটি অনুপাত দেওয়া, অন্য অনুপাতের রাশি চাওয়া।\n**সহজ কৌশল:** ছোট ত্রিভুজ এঁকে লম্ব $=${a}$, ভূমি $=${b}$, অতিভুজ $=${c}$ লিখে নাও; তারপর শুধু বসাও। লব-হরে ${c} দিয়ে গুণ করলে ভগ্নাংশ ঝামেলা চলে যায়।`),
+  CQ("m9", `$\\triangle ABC$-এ $\\angle B=90^\\circ$, $\\angle C=\\theta$ এবং $\\tan\\theta=\\frac{${a}}{${b}}$।\n${fig({ t: "rt", pts: ["A", "B", "C"], a: "AB", b: "BC", c: "AC", ang: "θ" })}`, [
+    part("$AC$ এর দৈর্ঘ্য $BC$-এর কত গুণ নির্ণয় করো।", `$\\tan\\theta=\\frac{AB}{BC}=\\frac{${a}}{${b}}$\n$AB=${a}k$, $BC=${b}k$ ধরি\nপিথাগোরাস: $AC=\\sqrt{AB^2+BC^2}=\\sqrt{${a * a}k^2+${b * b}k^2}=\\sqrt{${c * c}k^2}=${c}k$\n$\\frac{AC}{BC}=\\frac{${c}k}{${b}k}=${fr(c, b)}$\nতাই $AC=${fr(c, b)}\\,BC$`),
+    part("$\\sin\\theta$ ও $\\cos\\theta$ নির্ণয় করো।", `লম্ব $AB=${a}k$, ভূমি $BC=${b}k$, অতিভুজ $AC=${c}k$\n$\\sin\\theta=\\frac{\\text{লম্ব}}{\\text{অতিভুজ}}=\\frac{${a}k}{${c}k}=\\frac{${a}}{${c}}$\n$\\cos\\theta=\\frac{\\text{ভূমি}}{\\text{অতিভুজ}}=\\frac{${b}k}{${c}k}=\\frac{${b}}{${c}}$`),
+    part(`$\\frac{1+\\sin\\theta}{1-\\sin\\theta}$ এর মান নির্ণয় করো।`, `$\\sin\\theta=\\frac{${a}}{${c}}$ বসাই:\n$\\frac{1+\\sin\\theta}{1-\\sin\\theta}=\\frac{1+\\frac{${a}}{${c}}}{1-\\frac{${a}}{${c}}}=\\frac{\\frac{${c}+${a}}{${c}}}{\\frac{${c}-${a}}{${c}}}=\\frac{${c}+${a}}{${c}-${a}}=\\frac{${sN}}{${sD}}=${fr(sN, sD)}$`, `**সূত্র:** $\\tan\\theta=\\frac{\\text{লম্ব}}{\\text{ভূমি}}$ থেকে বাহু ধরো, পিথাগোরাসে অতিভুজ।\n**কীভাবে চিনবে:** একটি অনুপাত দেওয়া, অন্য অনুপাতের রাশি চাওয়া।\n**সহজ কৌশল:** ছোট ত্রিভুজ এঁকে লম্ব $=${a}$, ভূমি $=${b}$, অতিভুজ $=${c}$ লিখে নাও; তারপর শুধু বসাও। লব-হরে ${c} দিয়ে গুণ করলে ভগ্নাংশ ঝামেলা চলে যায়।`),
     part(`প্রমাণ করো: $${pf}$`, pp, `**কোন সূত্র:** $\\sin^2\\theta+\\cos^2\\theta=1$, $\\sec^2\\theta=1+\\tan^2\\theta$, $\\operatorname{cosec}^2\\theta=1+\\cot^2\\theta$\n**কীভাবে চিনবে:** 'প্রমাণ করো' + দুই পাশে ত্রিকোণমিতিক রাশি।\n**সহজ কৌশল:** ${ptip}। সবসময় জটিল পক্ষ (সাধারণত বামপক্ষ) থেকে শুরু করো।`),
   ])
 }
@@ -884,7 +891,7 @@ for (let t = 0; t < 3; t++) {
   const onlyB = b - c
   CQ("m2", `কোনো বিদ্যালয়ের ${N} জন শিক্ষার্থীর মধ্যে ${a} জন বাংলায়, ${b} জন গণিতে এবং ${c} জন উভয় বিষয়ে A+ পেয়েছে।`, [
     part("উপাত্তগুলোকে সেট আকারে প্রকাশ করো।", `$n(U)=${N}$, $n(B)=${a}$, $n(G)=${b}$, $n(B\\cap G)=${c}$`),
-    part("কতজন অন্তত একটি বিষয়ে A+ পেয়েছে?", `$n(B\\cup G)=${a}+${b}-${c}=${atLeast}$ জন`),
+    part("কতজন অন্তত একটি বিষয়ে A+ পেয়েছে?", `${fig({ t: "venn", A: "বাংলা B", B: "গণিত G", a: onlyA, ab: c, b: onlyB, out: none, U: `U = ${N}` })}\n$n(B\\cup G)=n(B)+n(G)-n(B\\cap G)=${a}+${b}-${c}=${atLeast}$ জন`),
     part("কতজন কেবল একটি বিষয়ে A+ পেয়েছে?", `কেবল বাংলা $=${a}-${c}=${onlyA}$, কেবল গণিত $=${b}-${c}=${onlyB}$\nমোট $=${onlyA + onlyB}$ জন`, `**সূত্র:** কেবল $A=n(A)-n(A\\cap B)$\n**কীভাবে চিনবে:** 'কেবল' শব্দটি দেখলেই ছেদ বাদ দিতে হবে।\n**সহজ কৌশল:** ভেনচিত্র আঁকো—মাঝে ${c}, বাম অংশে ${a}−${c}, ডান অংশে ${b}−${c}।`),
     part("কোনো বিষয়ে A+ পায়নি এমন শিক্ষার্থীর শতকরা হার নির্ণয় করো।", `কোনোটিতে নয় $=${N}-${atLeast}=${none}$ জন\nশতকরা হার $=\\frac{${none}}{${N}}\\times100=${dec((none / N) * 100)}\\%$`, `**সূত্র:** $n(A\\cup B)=n(A)+n(B)-n(A\\cap B)$, তারপর $n(U)-n(A\\cup B)$\n**কীভাবে চিনবে:** 'কোনোটিই নয়/পায়নি' → মোট থেকে সংযোগ বাদ।\n**সহজ কৌশল:** আগে $A\\cup B$ বের করো, তারপর মোট থেকে বাদ দিয়ে $\\frac{\\text{অংশ}}{\\text{মোট}}\\times100$।`),
   ])
@@ -895,7 +902,7 @@ for (let t = 0; t < 4; t++) {
   const d = pick([20, 30, 40, 50, 60])
   // far point at 30°, near point at 60°, distance between them d → h = d√3/2, near x = d/2
   const h = radTex(d / 2, 3)
-  CQ("m10", `একটি মিনারের পাদদেশ থেকে কিছু দূরে $P$ বিন্দুতে শীর্ষের উন্নতি কোণ $30^\\circ$। মিনারের দিকে $${d}$ মিটার এগিয়ে $Q$ বিন্দুতে গেলে উন্নতি কোণ হয় $60^\\circ$।`, [
+  CQ("m10", `একটি মিনারের পাদদেশ থেকে কিছু দূরে $P$ বিন্দুতে শীর্ষের উন্নতি কোণ $30^\\circ$। মিনারের দিকে $${d}$ মিটার এগিয়ে $Q$ বিন্দুতে গেলে উন্নতি কোণ হয় $60^\\circ$।\n${fig({ t: "elev2", pts: true, h: "h", x: "x", d: `${d} মি`, a1: "30°", a2: "60°" })}`, [
     part("উন্নতি কোণ কাকে বলে?", "ভূমির সমান্তরাল রেখার উপরে অবস্থিত কোনো বিন্দুর দিকে তাকালে দৃষ্টিরেখা ও আনুভূমিক রেখার মধ্যবর্তী কোণকে উন্নতি কোণ বলে।"),
     part("$\\tan30^\\circ$ ও $\\tan60^\\circ$ এর গুণফল কত?", "$\\frac{1}{\\sqrt3}\\times\\sqrt3=1$"),
     part("মিনারের উচ্চতা নির্ণয় করো।", `ধরি উচ্চতা $h$, $Q$ থেকে পাদদেশ $x$ মিটার।\n$\\triangle$ থেকে: $\\tan60^\\circ=\\frac hx\\Rightarrow h=\\sqrt3x$ …(১)\n$\\tan30^\\circ=\\frac{h}{x+${d}}\\Rightarrow h=\\frac{x+${d}}{\\sqrt3}$ …(২)\n(১) ও (২) থেকে $\\sqrt3x=\\frac{x+${d}}{\\sqrt3}\\Rightarrow 3x=x+${d}\\Rightarrow x=${d / 2}$\n$h=${d / 2}\\sqrt3=${dec((d / 2) * Math.sqrt(3))}$ মিটার (প্রায়)`, `**সূত্র:** $\\tan\\theta=\\frac{\\text{উচ্চতা}}{\\text{দূরত্ব}}$ দুইবার\n**কীভাবে চিনবে:** দুইটি কোণ + তাদের মাঝের দূরত্ব দেওয়া।\n**সহজ কৌশল:** কাছের দূরত্ব $x$ ধরো, দূরেরটা $x+${d}$। দুই সমীকরণে $h$ সমান করো—উত্তর সবসময় $h=\\frac{d\\sqrt3}{2}$ (30°–60° জোড়ার জন্য)।`),
@@ -905,7 +912,7 @@ for (let t = 0; t < 4; t++) {
 for (let t = 0; t < 3; t++) {
   const l = pick([10, 12, 16, 20])
   const x = pick([6, 8, 10, 12])
-  CQ("m10", `$${l}$ মিটার লম্বা একটি মই দেয়ালের সাথে হেলান দিয়ে মাটির সাথে $60^\\circ$ কোণ উৎপন্ন করে। অন্যদিকে, একটি গাছ ঝড়ে ভেঙে গিয়ে গোড়া থেকে $${x}$ মিটার দূরে মাটির সাথে $30^\\circ$ কোণে লেগে আছে।`, [
+  CQ("m10", `$${l}$ মিটার লম্বা একটি মই দেয়ালের সাথে হেলান দিয়ে মাটির সাথে $60^\\circ$ কোণ উৎপন্ন করে। অন্যদিকে, একটি গাছ ঝড়ে ভেঙে গিয়ে গোড়া থেকে $${x}$ মিটার দূরে মাটির সাথে $30^\\circ$ কোণে লেগে আছে।\n${fig({ t: "rt", wall: true, a: "h", b: "d", c: `মই ${l} মি`, ang: "60°" })}\n${fig({ t: "rt", tree: true, a: "দাঁড়ানো অংশ", c: "ভাঙা অংশ", b: `${x} মি`, ang: "30°" })}`, [
     part("$\\sin60^\\circ$ এর মান লেখো।", "$\\frac{\\sqrt3}{2}$"),
     part("মইয়ের পাদদেশ দেয়াল থেকে কত দূরে?", `$\\cos60^\\circ=\\frac{d}{${l}}\\Rightarrow d=${l}\\times\\frac12=${l / 2}$ মিটার`),
     part("মইটি দেয়ালের কত উচ্চতায় পৌঁছেছে?", `$\\sin60^\\circ=\\frac{h}{${l}}\\Rightarrow h=${l}\\times\\frac{\\sqrt3}{2}=${radTex(l / 2, 3)}\\approx${dec((l / 2) * Math.sqrt(3))}$ মিটার`, `**সূত্র:** $\\sin\\theta=\\frac{\\text{লম্ব}}{\\text{অতিভুজ}}$\n**কীভাবে চিনবে:** মই = অতিভুজ (জানা), উচ্চতা = লম্ব (অজানা) → $\\sin$।\n**সহজ কৌশল:** মনে রাখো—অতিভুজ জানা থাকলে উচ্চতা চাইলে $\\sin$, দূরত্ব চাইলে $\\cos$।`),
@@ -943,7 +950,7 @@ for (let t = 0; t < 3; t++) {
     part("$a:b$ এর ব্যস্ত অনুপাত লেখো।", `$b:a=${q}:${p}$`),
     part("$\\frac{a+b}{a-b}$ এর মান নির্ণয় করো।", `যোজন-বিয়োজন: $\\frac{${p}+${q}}{${p}-${q}}=${fr(p + q, p - q)}$`),
     part("প্রদত্ত সমীকরণে যোজন-বিয়োজন প্রয়োগ করে $\\frac{\\sqrt{1+x}}{\\sqrt{1-x}}$ নির্ণয় করো।", `যোজন-বিয়োজন: $\\frac{2\\sqrt{1+x}}{2\\sqrt{1-x}}=\\frac{${p}+${q}}{${p}-${q}}$\n$\\Rightarrow\\frac{\\sqrt{1+x}}{\\sqrt{1-x}}=${fr(p + q, p - q)}$`, `**সূত্র:** যোজন-বিয়োজন $\\frac{a}{b}=\\frac{c}{d}\\Rightarrow\\frac{a+b}{a-b}=\\frac{c+d}{c-d}$\n**কীভাবে চিনবে:** বামপক্ষে $\\frac{P+Q}{P-Q}$ আকার—যেখানে $P, Q$ বর্গমূল।\n**সহজ কৌশল:** যোজন-বিয়োজন করলে উপরে $2P$, নিচে $2Q$ থাকে; $2$ কেটে যায়। এটাই এক লাইনের কৌশল।`),
-    part("সমীকরণটি সমাধান করো।", `$\\frac{\\sqrt{1+x}}{\\sqrt{1-x}}=${fr(p + q, p - q)}$; বর্গ করি: $\\frac{1+x}{1-x}=\\frac{${(p + q) ** 2}}{${(p - q) ** 2}}$\nআবার যোজন-বিয়োজন: $\\frac{2}{2x}=\\frac{${(p + q) ** 2}+${(p - q) ** 2}}{${(p + q) ** 2}-${(p - q) ** 2}}=\\frac{${2 * (p * p + q * q)}}{${4 * p * q}}$\n$\\Rightarrow x=${fr(xN, xD)}$`, `**সূত্র:** দুইবার যোজন-বিয়োজন + বর্গ করা\n**কীভাবে চিনবে:** বর্গমূলের ভেতরে $1+x$ ও $1-x$।\n**সহজ কৌশল:** মুখস্থ ফল: উত্তর সবসময় $x=\\frac{2pq}{p^2+q^2}$ (এখানে $p=${p}, q=${q}$)—পরীক্ষায় উত্তর মিলিয়ে নিতে কাজে লাগে।`),
+    part("সমীকরণটি সমাধান করো।", `$\\frac{\\sqrt{1+x}}{\\sqrt{1-x}}=${fr(p + q, p - q)}$; বর্গ করি: $\\frac{1+x}{1-x}=\\frac{${(p + q) ** 2}}{${(p - q) ** 2}}$\nআবার যোজন-বিয়োজন: $\\frac{2}{2x}=\\frac{${(p + q) ** 2}+${(p - q) ** 2}}{${(p + q) ** 2}-${(p - q) ** 2}}=\\frac{${2 * (p * p + q * q)}}{${4 * p * q}}$\n$\\Rightarrow x=${fr(xN, xD)}$`, `**সূত্র:** দুইবার যোজন-বিয়োজন + বর্গ করা\n**কীভাবে চিনবে:** বর্গমূলের ভেতরে $1+x$ ও $1-x$।\n**সহজ কৌশল:** মুখস্থ ফল: উত্তর সবসময় $x=\\frac{2pq}{p^2+q^2}$ (এখানে $p=${p}$ ও $q=${q}$)—পরীক্ষায় উত্তর মিলিয়ে নিতে কাজে লাগে।`),
   ])
 }
 
@@ -973,7 +980,7 @@ for (let t = 0; t < 3; t++) {
   CQ("m13", `একটি গুণোত্তর ধারার প্রথম পদ $${a}$ এবং সাধারণ অনুপাত $${r}$।`, [
     part("ধারাটির প্রথম তিনটি পদ লেখো।", `$${a}, ${a * r}, ${a * r * r}$`),
     part(`ধারাটির $${n}$-তম পদ নির্ণয় করো।`, `$ar^{n-1}=${a}\\times${r}^{${n - 1}}=${tn}$`),
-    part(`ধারাটির প্রথম $${n}$ পদের সমষ্টি নির্ণয় করো।`, `$S_n=\\frac{a(r^n-1)}{r-1}=\\frac{${a}(${r}^{${n}}-1)}{${r}-1}=\\frac{${a}\\times${r ** n - 1}}{${r - 1}}=${S}$`, `**সূত্র:** $S_n=\\frac{a(r^n-1)}{r-1}$ ($r>1$)\n**কীভাবে চিনবে:** পদগুলো গুণ করে বাড়ছে → গুণোত্তর।\n**সহজ কৌশল:** আগে $r^n$ আলাদা করে হিসাব করো (${r}^{${n}}=${r ** n}$), তারপর বসাও।`),
+    part(`ধারাটির প্রথম $${n}$ পদের সমষ্টি নির্ণয় করো।`, `$S_n=\\frac{a(r^n-1)}{r-1}=\\frac{${a}(${r}^{${n}}-1)}{${r}-1}=\\frac{${a}\\times${r ** n - 1}}{${r - 1}}=${S}$`, `**সূত্র:** $S_n=\\frac{a(r^n-1)}{r-1}$ ($r>1$)\n**কীভাবে চিনবে:** পদগুলো গুণ করে বাড়ছে → গুণোত্তর।\n**সহজ কৌশল:** আগে $r^n$ আলাদা করে হিসাব করো ($${r}^{${n}}=${r ** n}$), তারপর বসাও।`),
     part(`ধারাটির কততম পদ $${a * r ** (k - 1)}$?`, `$${a}\\times${r}^{n-1}=${a * r ** (k - 1)}\\Rightarrow ${r}^{n-1}=${r ** (k - 1)}=${r}^{${k - 1}}$\n$\\Rightarrow n-1=${k - 1}\\Rightarrow n=${k}$`, `**সূত্র:** $ar^{n-1}$ = প্রদত্ত পদ\n**কীভাবে চিনবে:** 'কততম পদ' → $n$ অজানা।\n**সহজ কৌশল:** দুই পক্ষকে $a$ দিয়ে ভাগ করে একই ভিত্তির ঘাত বানাও, তারপর ঘাত সমান করো।`),
   ])
 }
@@ -988,11 +995,11 @@ for (let t = 0; t < 4; t++) {
   const path = outer - l * b
   const inner = (l - 2 * w) * (b - 2 * w)
   const inPath = l * b - inner
-  CQ("m16", `একটি আয়তাকার বাগানের দৈর্ঘ্য $${l}$ মিটার ও প্রস্থ $${b}$ মিটার। বাগানের বাইরে চারদিকে $${w}$ মিটার চওড়া একটি রাস্তা আছে।`, [
+  CQ("m16", `একটি আয়তাকার বাগানের দৈর্ঘ্য $${l}$ মিটার ও প্রস্থ $${b}$ মিটার। বাগানের বাইরে চারদিকে $${w}$ মিটার চওড়া একটি রাস্তা আছে।\n${fig({ t: "rect", l: `${l} মি`, b: `${b} মি`, w: `${w} মি`, path: "out" })}`, [
     part("বাগানের ক্ষেত্রফল ও পরিসীমা নির্ণয় করো।", `ক্ষেত্রফল $=${l}\\times${b}=${l * b}$ বর্গমিটার; পরিসীমা $=2(${l}+${b})=${2 * (l + b)}$ মিটার`),
     part("রাস্তাসহ বাগানের দৈর্ঘ্য ও প্রস্থ নির্ণয় করো।", `দৈর্ঘ্য $=${l}+2\\times${w}=${l + 2 * w}$, প্রস্থ $=${b}+2\\times${w}=${b + 2 * w}$ মিটার`),
     part(`প্রতি বর্গমিটার $${rate}$ টাকা হিসেবে রাস্তা পাকা করতে কত খরচ হবে?`, `রাস্তাসহ ক্ষেত্রফল $=${l + 2 * w}\\times${b + 2 * w}=${outer}$\nরাস্তার ক্ষেত্রফল $=${outer}-${l * b}=${path}$ বর্গমিটার\nখরচ $=${path}\\times${rate}=${path * rate}$ টাকা`, `**সূত্র:** রাস্তার ক্ষেত্রফল = (বাইরের আয়ত) − (ভেতরের আয়ত)\n**কীভাবে চিনবে:** 'বাইরে চারদিকে রাস্তা'।\n**সহজ কৌশল:** বাইরে রাস্তা হলে দৈর্ঘ্য-প্রস্থ **যোগ** $2w$; ভেতরে হলে **বিয়োগ** $2w$। তারপর বড় − ছোট।`),
-    part("রাস্তাটি বাগানের ভেতরে হলে রাস্তার ক্ষেত্রফল কত হতো? বাইরের রাস্তার সাথে তুলনা করো।", `ভেতরের খালি অংশ $=(${l}-${2 * w})\\times(${b}-${2 * w})=${inner}$\nভেতরের রাস্তা $=${l * b}-${inner}=${inPath}$ বর্গমিটার\nবাইরের রাস্তা ${path} বর্গমিটার, যা ${path - inPath} বর্গমিটার বেশি।`, `**সূত্র:** ভেতরের রাস্তা $=lb-(l-2w)(b-2w)$\n**কীভাবে চিনবে:** 'ভেতরে চারদিকে'।\n**সহজ কৌশল:** বাইরের রাস্তা সর্বদা বড়, কারণ কোণের চারটি বর্গ ($4w^2$) বাড়তি যোগ হয়: পার্থক্য $=8w^2=${8 * w * w}$।`),
+    part("রাস্তাটি বাগানের ভেতরে হলে রাস্তার ক্ষেত্রফল কত হতো? বাইরের রাস্তার সাথে তুলনা করো।", `${fig({ t: "rect", l: `${l} মি`, b: `${b} মি`, w: `${w} মি`, path: "in" })}\nভেতরের খালি অংশ $=(${l}-${2 * w})\\times(${b}-${2 * w})=${inner}$\nভেতরের রাস্তা $=${l * b}-${inner}=${inPath}$ বর্গমিটার\nবাইরের রাস্তা ${path} বর্গমিটার, যা ${path - inPath} বর্গমিটার বেশি।`, `**সূত্র:** ভেতরের রাস্তা $=lb-(l-2w)(b-2w)$\n**কীভাবে চিনবে:** 'ভেতরে চারদিকে'।\n**সহজ কৌশল:** বাইরের রাস্তা সর্বদা বড়, কারণ কোণের চারটি বর্গ ($4w^2$) বাড়তি যোগ হয়: পার্থক্য $=8w^2=${8 * w * w}$।`),
   ])
 }
 for (let t = 0; t < 3; t++) {
@@ -1002,16 +1009,61 @@ for (let t = 0; t < 3; t++) {
   const A = 84 * k * k
   const hgt = (2 * A) / b
   const rin = A / s
-  CQ("m16", `একটি ত্রিভুজাকৃতি জমির তিন বাহুর দৈর্ঘ্য যথাক্রমে $${a}$ মি, $${b}$ মি ও $${c}$ মি।`, [
+  CQ("m16", `একটি ত্রিভুজাকৃতি জমির তিন বাহুর দৈর্ঘ্য যথাক্রমে $${a}$ মি, $${b}$ মি ও $${c}$ মি।\n${fig({ t: "tri", a: `${c} মি`, b: `${b} মি`, c: `${a} মি` })}`, [
     part("জমিটির অর্ধপরিসীমা নির্ণয় করো।", `$s=\\frac{${a}+${b}+${c}}{2}=${s}$ মিটার`),
-    part("জমিটির ক্ষেত্রফল নির্ণয় করো।", `$\\sqrt{s(s-a)(s-b)(s-c)}=\\sqrt{${s}\\times${s - a}\\times${s - b}\\times${s - c}}=${A}$ বর্গমিটার`),
-    part(`$${b}$ মিটার বাহুর বিপরীত শীর্ষ থেকে ওই বাহুর উপর লম্বের দৈর্ঘ্য নির্ণয় করো।`, `ক্ষেত্রফল $=\\frac12\\times\\text{ভূমি}\\times\\text{উচ্চতা}\\Rightarrow ${A}=\\frac12\\times${b}\\times h$\n$\\Rightarrow h=\\frac{2\\times${A}}{${b}}=${dec(hgt)}$ মিটার`, `**সূত্র:** $h=\\frac{2\\times\\text{ক্ষেত্রফল}}{\\text{ভূমি}}$\n**কীভাবে চিনবে:** 'লম্বের দৈর্ঘ্য/উচ্চতা' চাওয়া, ক্ষেত্রফল আগেই জানা।\n**সহজ কৌশল:** হেরনের সূত্রে পাওয়া ক্ষেত্রফল উল্টো দিক থেকে $\\frac12bh$-তে বসাও।`),
+    part("জমিটির ক্ষেত্রফল নির্ণয় করো।", `$s=${s}$, $s-a=${s - a}$, $s-b=${s - b}$, $s-c=${s - c}$\nক্ষেত্রফল $=\\sqrt{s(s-a)(s-b)(s-c)}=\\sqrt{${s}\\times${s - a}\\times${s - b}\\times${s - c}}=\\sqrt{${A * A}}=${A}$ বর্গমিটার`),
+    part(`$${b}$ মিটার বাহুর বিপরীত শীর্ষ থেকে ওই বাহুর উপর লম্বের দৈর্ঘ্য নির্ণয় করো।`, `${fig({ t: "tri", a: `${c} মি`, b: `${b} মি`, c: `${a} মি`, h: "h" })}\nক্ষেত্রফল $=\\frac12\\times\\text{ভূমি}\\times\\text{উচ্চতা}\\Rightarrow ${A}=\\frac12\\times${b}\\times h$\n$\\Rightarrow h=\\frac{2\\times${A}}{${b}}=${dec(hgt)}$ মিটার`, `**সূত্র:** $h=\\frac{2\\times\\text{ক্ষেত্রফল}}{\\text{ভূমি}}$\n**কীভাবে চিনবে:** 'লম্বের দৈর্ঘ্য/উচ্চতা' চাওয়া, ক্ষেত্রফল আগেই জানা।\n**সহজ কৌশল:** হেরনের সূত্রে পাওয়া ক্ষেত্রফল উল্টো দিক থেকে $\\frac12bh$-তে বসাও।`),
     part("জমিটির ভেতরে সবচেয়ে বড় যে বৃত্তাকার পুকুর কাটা যাবে তার ব্যাসার্ধ ও ক্ষেত্রফল নির্ণয় করো।", `অন্তর্বৃত্তের ব্যাসার্ধ $r=\\frac{\\text{ক্ষেত্রফল}}{s}=\\frac{${A}}{${s}}=${rin}$ মিটার\nপুকুরের ক্ষেত্রফল $=\\pi r^2=${rin * rin}\\pi\\approx${dec(Math.PI * rin * rin)}$ বর্গমিটার`, `**সূত্র:** অন্তর্ব্যাসার্ধ $r=\\frac{\\Delta}{s}$, বৃত্তের ক্ষেত্রফল $\\pi r^2$\n**কীভাবে চিনবে:** 'ত্রিভুজের ভেতরে সবচেয়ে বড় বৃত্ত' = অন্তর্বৃত্ত।\n**সহজ কৌশল:** তিনটি ছোট ত্রিভুজের ক্ষেত্রফলের যোগ $=\\frac12r(a+b+c)=rs$, তাই $r=\\frac{\\Delta}{s}$।`),
   ])
 }
 
 cq.forEach((c, i) => (c.id = i + 1))
 mcq.forEach((m, i) => (m.id = i + 1))
+
+// Vertical step layout + "কোনটা কী ধরবে" legend for every explanation / solution.
+// Figures for the fixed concept questions.
+const FIXED_FIG = [
+  ["m9", "বিপরীত বাহুকে কী বলে", { t: "rt", a: "লম্ব", b: "ভূমি", c: "অতিভুজ", ang: "θ" }],
+  ["m10", "ভূমির সমান্তরাল রেখার উপরে", { t: "elev", h: "", d: "আনুভূমিক রেখা", ang: "উন্নতি কোণ" }],
+  ["m10", "উপর থেকে নিচের", { t: "elev", down: true, h: "", d: "", ang: "অবনতি কোণ" }],
+  ["m10", "খুঁটির উচ্চতা ও ছায়ার দৈর্ঘ্য সমান", { t: "elev", obj: "pole", h: "h", d: "ছায়া h", ang: "θ" }],
+  ["m10", "মই দেয়ালে হেলান", { t: "rt", wall: true, a: "দেয়াল", b: "মাটি", c: "মই = অতিভুজ" }],
+  ["m10", "ছায়ার দৈর্ঘ্য—", { t: "elev", obj: "pole", h: "h", d: "ছায়া", ang: "θ" }],
+  ["m16", "সমবাহু ত্রিভুজের ক্ষেত্রফলের সূত্র", { t: "tri", eq: true, a: "a", b: "a", c: "a" }],
+  ["m16", "রম্বসের ক্ষেত্রফল কোনটি", { t: "rhombus", d1: "d1", d2: "d2" }],
+  ["m16", "ট্রাপিজিয়ামের ক্ষেত্রফল কোনটি", { t: "trap", a: "a", b: "b", h: "h" }],
+  ["m16", "আয়তাকার ঘনবস্তুর কর্ণের", { t: "cuboid", l: "a", w: "b", h: "c" }],
+  ["m16", "সিলিন্ডারের বক্রতলের", { t: "cyl", r: "r", h: "h" }],
+  ["m16", "হেরনের সূত্র", { t: "tri", a: "a", b: "b", c: "c" }],
+  ["m16", "ব্যাসার্ধ দ্বিগুণ", { t: "circle", r: "r" }],
+]
+const FIXED_LEG = {
+  "ট্রাপিজিয়ামের ক্ষেত্রফল কোনটি": ["$a, b$ = সমান্তরাল বাহু দুটি", "$h$ = সমান্তরাল বাহুদ্বয়ের লম্ব দূরত্ব"],
+  "আয়তাকার ঘনবস্তুর কর্ণের": ["$a$ = দৈর্ঘ্য, $b$ = প্রস্থ, $c$ = উচ্চতা"],
+  "সিলিন্ডারের বক্রতলের": ["$r$ = ভূমির ব্যাসার্ধ", "$h$ = উচ্চতা", "$\\pi\\approx3.1416$"],
+  "হেরনের সূত্র": ["$a, b, c$ = তিন বাহু", "$s$ = অর্ধপরিসীমা"],
+  "সমবাহু ত্রিভুজের ক্ষেত্রফলের সূত্র": ["$a$ = এক বাহুর দৈর্ঘ্য"],
+  "রম্বসের ক্ষেত্রফল কোনটি": ["$d_1, d_2$ = দুই কর্ণ"],
+}
+for (const m of mcq) {
+  const f = FIXED_FIG.find(([ch, q]) => m.ch === ch && m.q.includes(q))
+  if (f) m.ex = `${fig(f[2])}\n${m.ex}`
+  const l = Object.keys(FIXED_LEG).find((q) => m.q.includes(q))
+  if (l && m.ch === "m16") m.leg = FIXED_LEG[l]
+}
+for (const m of mcq) {
+  m.ex = withLegend(vert(m.ex), m.leg ?? legend(m.ch, m.ex, `${m.q}\n${m.opts.join("\n")}`))
+  delete m.leg
+}
+for (const c of cq) {
+  c.stem = c.stem.replace(/(^|\n)(?![|[])([^\n]*)/g, (_, b, l) => b + l)
+  for (const p of c.parts) {
+    const lines = legend(c.ch, `${p.a}\n${p.tip ?? ""}`, p.q)
+    p.a = vert(p.a)
+    if (p.tip) p.tip = withLegend(vert(p.tip), lines)
+    else p.a = withLegend(p.a, lines)
+  }
+}
 
 const count = (arr) => arr.reduce((o, x) => ((o[x.ch] = (o[x.ch] ?? 0) + 1), o), {})
 console.log("math MCQ:", mcq.length, JSON.stringify(count(mcq)))
