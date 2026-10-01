@@ -4,17 +4,19 @@ import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { RichText } from "@/components/rich-text"
 import {
   BLOCK,
   BREAKS,
   MCQ_TOTAL,
   LABELS,
   bn,
-  breakItems,
-  chapterById,
-  chapters,
-  mcqById,
+  subjects,
+  subjectById,
+  type BreakPage,
   type Mcq,
+  type Subject,
+  type SubjectId,
 } from "@/lib/content"
 import { cn } from "@/lib/utils"
 
@@ -27,19 +29,24 @@ type State = {
 }
 
 const DEVICE_KEY = "ssc-boost-device"
-const BREAK_PER_PAGE = 5
+const SUBJECT_KEY = "ssc-boost-subject"
+
+function store(key: string, value?: string | null) {
+  try {
+    if (value === undefined) return localStorage.getItem(key)
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, value)
+  } catch {}
+  return null
+}
 
 function deviceId(): string {
-  try {
-    let id = localStorage.getItem(DEVICE_KEY)
-    if (!id) {
-      id = crypto.randomUUID()
-      localStorage.setItem(DEVICE_KEY, id)
-    }
-    return id
-  } catch {
-    return crypto.randomUUID()
+  let id = store(DEVICE_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    store(DEVICE_KEY, id)
   }
+  return id
 }
 
 async function post(path: string, body: object): Promise<State> {
@@ -52,70 +59,137 @@ async function post(path: string, body: object): Promise<State> {
   return res.json()
 }
 
+const inProgress = (s: State) => s.mcqIndex > 0 || s.breakDone > 0
+
 export default function Home() {
   const [id, setId] = useState("")
-  const [state, setState] = useState<State | null>(null)
+  const [states, setStates] = useState<Partial<Record<SubjectId, State>>>({})
+  const [open, setOpen] = useState<SubjectId | null>(null)
   const [started, setStarted] = useState(false)
   const [error, setError] = useState("")
+  // Math shows the result of the last answer until "পরবর্তী" is pressed.
+  const [reveal, setReveal] = useState<{ qId: number; choice: number } | null>(null)
 
   useEffect(() => {
     const d = deviceId()
     setId(d)
-    post("/api/state", { deviceId: d })
-      .then((s) => {
-        setState(s)
-        // Resume straight into the exam if it was already in progress.
-        if (s.mcqIndex > 0 || s.breakDone > 0) setStarted(true)
+    Promise.all(subjects.map((s) => post("/api/state", { subject: s.id, deviceId: d })))
+      .then((list) => {
+        const next = Object.fromEntries(subjects.map((s, i) => [s.id, list[i]]))
+        setStates(next)
+        // Resume straight into the subject that was open before the refresh.
+        const last = store(SUBJECT_KEY)
+        if (last && subjectById.has(last) && inProgress(next[last])) {
+          setOpen(last as SubjectId)
+          setStarted(true)
+        }
       })
       .catch(() => setError("সার্ভারে সংযোগ হচ্ছে না। আবার চেষ্টা করো।"))
   }, [])
 
   const call = useCallback(
-    async (path: string, body: object) => {
+    async (subject: SubjectId, path: string, body: object, then?: () => void) => {
       try {
-        setState(await post(path, { deviceId: id, ...body }))
+        const s = await post(path, { subject, deviceId: id, ...body })
+        // Same tick as the state update, so the next question never flashes
+        // before the feedback screen.
+        then?.()
+        setStates((prev) => ({ ...prev, [subject]: s }))
         setError("")
+        return true
       } catch {
         setError("সেভ হয়নি। ইন্টারনেট দেখে আবার চাপো।")
+        return false
       }
     },
     [id],
   )
 
-  if (!state) {
+  const loaded = subjects.every((s) => states[s.id])
+  if (!loaded) {
     return (
       <Shell>
-        <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
-          {error || "লোড হচ্ছে…"}
-        </div>
+        <div className="flex flex-1 items-center justify-center text-sm text-neutral-500">{error || "লোড হচ্ছে…"}</div>
       </Shell>
     )
   }
 
-  if (!started) return <Start state={state} onStart={() => setStarted(true)} />
+  if (!open) {
+    return (
+      <SubjectList
+        states={states as Record<SubjectId, State>}
+        onOpen={(s) => {
+          setOpen(s)
+          setStarted(false)
+        }}
+      />
+    )
+  }
+
+  const subject = subjectById.get(open)!
+  const state = states[open]!
+  const goHome = () => {
+    store(SUBJECT_KEY, null)
+    setStarted(false)
+    setOpen(null)
+    setReveal(null)
+  }
+
+  if (!started) {
+    return (
+      <Start
+        subject={subject}
+        state={state}
+        onBack={goHome}
+        onStart={() => {
+          store(SUBJECT_KEY, subject.id)
+          setStarted(true)
+        }}
+      />
+    )
+  }
 
   const breakDue = state.mcqIndex >= BLOCK * (state.breakDone + 1)
   let screen: React.ReactNode
-  if (state.finished) {
-    screen = <Done state={state} onRestart={() => call("/api/restart", {})} />
+  if (reveal) {
+    const q = subject.mcqById.get(reveal.qId)!
+    screen = (
+      <Feedback
+        key={`r${q.id}`}
+        subject={subject}
+        q={q}
+        n={state.order.indexOf(q.id) + 1}
+        choice={reveal.choice}
+        onNext={() => setReveal(null)}
+      />
+    )
+  } else if (state.finished) {
+    screen = <Done subject={subject} state={state} onRestart={() => call(subject.id, "/api/restart", {})} />
   } else if (breakDue) {
     const k = state.breakDone + 1
-    screen = <Break key={k} k={k} onDone={() => call("/api/break", { k })} />
+    screen = (
+      <Break key={`${subject.id}${k}`} subject={subject} k={k} onDone={() => call(subject.id, "/api/break", { k })} />
+    )
   } else {
-    const q = mcqById.get(state.order[state.mcqIndex])!
+    const q = subject.mcqById.get(state.order[state.mcqIndex])!
     screen = (
       <Question
-        key={q.id}
+        key={`${subject.id}${q.id}`}
+        subject={subject}
         q={q}
         n={state.mcqIndex + 1}
-        onAnswer={(choice) => call("/api/answer", { qId: q.id, choice })}
+        onAnswer={async (choice) => {
+          await call(subject.id, "/api/answer", { qId: q.id, choice }, () => {
+            if (subject.instant) setReveal({ qId: q.id, choice })
+          })
+        }}
       />
     )
   }
 
   return (
     <Shell>
-      <Header state={state} onHome={() => setStarted(false)} />
+      <Header subject={subject} state={state} onHome={goHome} />
       {error && <p className="mb-2 text-center text-xs font-medium">{error}</p>}
       {screen}
     </Shell>
@@ -130,13 +204,57 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-function Header({ state, onHome }: { state: State; onHome: () => void }) {
+function SubjectList({ states, onOpen }: { states: Record<SubjectId, State>; onOpen: (s: SubjectId) => void }) {
+  return (
+    <Shell>
+      <div className="shrink-0 pt-2">
+        <p className="text-xs tracking-wide text-neutral-500">মাধ্যমিক · গুরুত্বপূর্ণ MCQ ও সৃজনশীল</p>
+        <h1 className="text-3xl leading-tight font-bold">SSC 2025</h1>
+      </div>
+      <Separator className="my-4" />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {subjects.map((s, i) => {
+          const st = states[s.id]
+          const done = Math.min(st.mcqIndex, MCQ_TOTAL)
+          return (
+            <div key={s.id}>
+              {i > 0 && <Separator className="my-4" />}
+              <button className="w-full text-left" onClick={() => onOpen(s.id)}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-xl font-bold">{s.title}</p>
+                  <span className="shrink-0 text-xs tabular-nums text-neutral-500">
+                    {st.finished ? "Done" : `${bn(done)}/${bn(MCQ_TOTAL)}`}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[12.5px] leading-snug text-neutral-600">{s.subtitle}</p>
+                <p className="mt-1 line-clamp-2 text-[12px] leading-snug text-neutral-500">
+                  {s.chapters.map((c) => c.title).join(" · ")}
+                </p>
+                <Progress value={(done / MCQ_TOTAL) * 100} className="mt-2 h-1" />
+              </button>
+              <Button
+                variant={inProgress(st) ? "default" : "outline"}
+                className="mt-3 h-11 w-full text-base"
+                onClick={() => onOpen(s.id)}
+              >
+                {st.finished ? "ফলাফল দেখো" : inProgress(st) ? "চালিয়ে যাও" : "খোলো"}
+              </Button>
+            </div>
+          )
+        })}
+      </div>
+      <p className="shrink-0 pt-3 text-center text-[11px] text-neutral-400">প্রগ্রেস স্বয়ংক্রিয়ভাবে সেভ হয়</p>
+    </Shell>
+  )
+}
+
+function Header({ subject, state, onHome }: { subject: Subject; state: State; onHome: () => void }) {
   const done = Math.min(state.mcqIndex, MCQ_TOTAL)
   return (
     <header className="mb-3 shrink-0">
       <div className="mb-2 flex items-center justify-between">
         <button onClick={onHome} className="text-sm font-semibold">
-          বাংলা ১ম পত্র
+          ← {subject.title}
         </button>
         <span className="text-xs tabular-nums text-neutral-500">
           {bn(done)} / {bn(MCQ_TOTAL)}
@@ -147,87 +265,113 @@ function Header({ state, onHome }: { state: State; onHome: () => void }) {
   )
 }
 
-function Start({ state, onStart }: { state: State; onStart: () => void }) {
-  const prose = chapters.filter((c) => c.kind === "গদ্য")
-  const poems = chapters.filter((c) => c.kind === "কবিতা")
-  const inProgress = state.mcqIndex > 0 || state.breakDone > 0
+function Start({
+  subject,
+  state,
+  onStart,
+  onBack,
+}: {
+  subject: Subject
+  state: State
+  onStart: () => void
+  onBack: () => void
+}) {
+  const groups = [...new Set(subject.chapters.map((c) => c.kind))].map((kind) => ({
+    kind,
+    items: subject.chapters.filter((c) => c.kind === kind),
+  }))
+  const twoCol = groups.length > 1
   return (
     <Shell>
       <div className="shrink-0 pt-2">
-        <p className="text-xs tracking-wide text-neutral-500">SSC 2025 · মাধ্যমিক বাংলা সাহিত্য</p>
-        <h1 className="text-2xl leading-tight font-bold">বাংলা ১ম পত্র MCQ</h1>
-        <p className="mt-1 text-xs text-neutral-600">
-          {bn(MCQ_TOTAL)} MCQ · প্রতি {bn(BLOCK)}টির পর বিরতিতে {bn(30)} জ্ঞানমূলক + {bn(10)} অনুধাবনমূলক
-        </p>
+        <button onClick={onBack} className="mb-1 text-xs text-neutral-500">
+          ← সব বিষয়
+        </button>
+        <h1 className="text-2xl leading-tight font-bold">{subject.title} MCQ</h1>
+        <p className="mt-1 text-xs text-neutral-600">{subject.subtitle}</p>
       </div>
       <Separator className="my-3" />
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-x-4 overflow-hidden text-[12.5px] leading-[1.45]">
-        <ChapterList title={`গদ্য (${bn(prose.length)})`} items={prose.map((c) => c.title)} />
-        <ChapterList title={`কবিতা (${bn(poems.length)})`} items={poems.map((c) => c.title)} />
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 gap-x-4 overflow-hidden leading-[1.45]",
+          twoCol ? "grid-cols-2 text-[12.5px]" : "grid-cols-1 text-[15px]",
+        )}
+      >
+        {groups.map((g) => (
+          <div key={g.kind} className="min-h-0">
+            <p className="mb-1 text-xs font-semibold">
+              {twoCol ? `${g.kind} (${bn(g.items.length)})` : "অধ্যায় (এই ক্রমে)"}
+            </p>
+            <ol className={cn(!twoCol && "flex flex-col gap-1.5")}>
+              {g.items.map((c) => (
+                <li key={c.id} className="truncate text-neutral-700">
+                  {twoCol ? c.title : `${c.author} — ${c.title}`}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
       </div>
       <div className="shrink-0 pt-3">
-        {inProgress && (
+        {inProgress(state) && (
           <p className="mb-2 text-center text-xs text-neutral-500">
             {state.finished ? "পরীক্ষা শেষ হয়েছে" : `${bn(state.mcqIndex)}টি উত্তর দেওয়া হয়েছে`}
           </p>
         )}
         <Button className="h-12 w-full text-base" onClick={onStart}>
-          {state.finished ? "ফলাফল দেখো" : inProgress ? "চালিয়ে যাও" : "শুরু করো"}
+          {state.finished ? "ফলাফল দেখো" : inProgress(state) ? "চালিয়ে যাও" : "শুরু করো"}
         </Button>
       </div>
     </Shell>
   )
 }
 
-function ChapterList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div className="min-h-0">
-      <p className="mb-1 text-xs font-semibold">{title}</p>
-      <ol>
-        {items.map((t) => (
-          <li key={t} className="truncate text-neutral-700">
-            {t}
-          </li>
-        ))}
-      </ol>
-    </div>
-  )
-}
-
 // Long passages / multi-statement questions get a smaller type size so the
 // whole question fits the fixed screen without scrolling.
-function sizeFor(q: Mcq) {
-  const len = (q.passage?.length ?? 0) + q.q.length + q.opts.join("").length
+function sizeFor(q: Mcq, extra = 0) {
+  const len = (q.passage?.length ?? 0) + q.q.length + q.opts.join("").length + extra
   if (len > 520) return "text-[13px]"
   if (len > 380) return "text-[14px]"
   if (len > 260) return "text-[15px]"
   return "text-[16px]"
 }
 
-function QuestionBody({ q, n, label }: { q: Mcq; n?: number; label?: string }) {
+function QuestionBody({ subject, q, n, label }: { subject: Subject; q: Mcq; n?: number; label?: string }) {
   return (
     <>
       <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
         <span>{label ?? `প্রশ্ন ${bn(n!)}`}</span>
-        <span className="truncate pl-3">{chapterById.get(q.ch)?.title}</span>
+        <span className="truncate pl-3">{subject.chapterById.get(q.ch)?.title}</span>
       </div>
       {q.passage && (
-        <p className="mb-3 border-l-2 border-black pl-3 leading-relaxed whitespace-pre-line text-neutral-800">
-          {q.passage}
+        <p className="mb-3 border-l-2 border-black pl-3 leading-relaxed text-neutral-800">
+          <RichText text={q.passage} />
         </p>
       )}
-      <p className="mb-4 leading-relaxed font-semibold whitespace-pre-line">{q.q}</p>
+      <p className="mb-4 leading-relaxed font-semibold">
+        <RichText text={q.q} />
+      </p>
     </>
   )
 }
 
-function Question({ q, n, onAnswer }: { q: Mcq; n: number; onAnswer: (c: number) => Promise<void> }) {
+function Question({
+  subject,
+  q,
+  n,
+  onAnswer,
+}: {
+  subject: Subject
+  q: Mcq
+  n: number
+  onAnswer: (c: number) => Promise<void>
+}) {
   const [picked, setPicked] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   return (
     <>
       <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", sizeFor(q))}>
-        <QuestionBody q={q} n={n} />
+        <QuestionBody subject={subject} q={q} n={n} />
         <div className="flex flex-col gap-2">
           {q.opts.map((o, i) => (
             <button
@@ -246,7 +390,9 @@ function Question({ q, n, onAnswer }: { q: Mcq; n: number; onAnswer: (c: number)
               >
                 {LABELS[i]}
               </span>
-              <span className="pt-px">{o}</span>
+              <span className="pt-px">
+                <RichText text={o} />
+              </span>
             </button>
           ))}
         </div>
@@ -260,56 +406,164 @@ function Question({ q, n, onAnswer }: { q: Mcq; n: number; onAnswer: (c: number)
           setSaving(false)
         }}
       >
-        {saving ? "সেভ হচ্ছে…" : "পরবর্তী"}
+        {saving ? "সেভ হচ্ছে…" : subject.instant ? "উত্তর দাও" : "পরবর্তী"}
       </Button>
     </>
   )
 }
 
-function Break({ k, onDone }: { k: number; onDone: () => Promise<void> }) {
-  const items = breakItems(k)
-  const pages = Math.ceil(items.length / BREAK_PER_PAGE)
-  const key = `ssc-boost-break-${k}`
-  const [page, setPage] = useState(0)
-  const [saving, setSaving] = useState(false)
+function Options({ q, mine }: { q: Mcq; mine: number | undefined }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {q.opts.map((o, j) => (
+        <div
+          key={j}
+          className={cn(
+            "flex items-start gap-3 rounded-lg border px-3 py-2 leading-snug",
+            j === q.a
+              ? "border-black bg-black text-white"
+              : j === mine
+                ? "border-dashed border-black"
+                : "border-neutral-200 text-neutral-500",
+          )}
+        >
+          <span className="w-5 shrink-0">{LABELS[j]}</span>
+          <span className={cn(j === mine && j !== q.a && "line-through")}>
+            <RichText text={o} />
+          </span>
+          {j === q.a && <span className="ml-auto shrink-0 text-xs">সঠিক</span>}
+          {j === mine && j !== q.a && <span className="ml-auto shrink-0 text-xs">তোমার</span>}
+        </div>
+      ))}
+    </div>
+  )
+}
 
-  useEffect(() => {
-    try {
-      const p = Number(localStorage.getItem(key))
-      if (p > 0 && p < pages) setPage(p)
-    } catch {}
-  }, [key, pages])
+function Explanation({ q }: { q: Mcq }) {
+  if (!q.ex) return null
+  return (
+    <div className="mt-3 border-l-2 border-black pl-3 leading-relaxed">
+      <p className="text-xs font-semibold text-neutral-500">ব্যাখ্যা</p>
+      <RichText text={q.ex} />
+    </div>
+  )
+}
 
-  const go = (p: number) => {
-    setPage(p)
-    try {
-      localStorage.setItem(key, String(p))
-    } catch {}
-  }
-
-  const slice = items.slice(page * BREAK_PER_PAGE, (page + 1) * BREAK_PER_PAGE)
-  const last = page === pages - 1
+function Feedback({
+  subject,
+  q,
+  n,
+  choice,
+  onNext,
+}: {
+  subject: Subject
+  q: Mcq
+  n: number
+  choice: number
+  onNext: () => void
+}) {
+  const right = choice === q.a
   return (
     <>
-      <div className="mb-2 shrink-0">
-        <p className="text-xs text-neutral-500">
-          বিরতি {bn(k)}/{bn(BREAKS)} · পৃষ্ঠা {bn(page + 1)}/{bn(pages)}
-        </p>
-        <h2 className="text-lg font-bold">
-          {slice[0]?.kind === "ক" ? "জ্ঞানমূলক প্রশ্ন (ক)" : "অনুধাবনমূলক প্রশ্ন (খ)"}
-        </h2>
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", sizeFor(q, q.ex?.length ?? 0))}>
+        <QuestionBody subject={subject} q={q} label={`প্রশ্ন ${bn(n)} · ${right ? "সঠিক ✓" : "ভুল ✗"}`} />
+        <Options q={q} mine={choice} />
+        <Explanation q={q} />
       </div>
+      <Button className="mt-3 h-12 w-full shrink-0 text-base" onClick={onNext}>
+        পরবর্তী
+      </Button>
+    </>
+  )
+}
+
+function BreakView({ subject, page }: { subject: Subject; page: BreakPage }) {
+  if (page.kind === "short") {
+    return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-        {slice.map((s) => (
+        {page.items.map((s) => (
           <div key={s.id} className="border-b border-neutral-200 pb-3 last:border-0">
             <p className="text-[11px] text-neutral-500">
-              {s.kind} · {chapterById.get(s.ch)?.title}
+              {s.kind} · {subject.chapterById.get(s.ch)?.title}
             </p>
             <p className="text-[15px] leading-snug font-semibold">{s.q}</p>
             <p className="mt-0.5 text-[14px] leading-snug text-neutral-700">{s.a}</p>
           </div>
         ))}
       </div>
+    )
+  }
+  const { cq } = page
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto text-[14px] leading-snug">
+      <p className="text-[11px] text-neutral-500">
+        সৃজনশীল {bn(page.n)}/{bn(page.of)} · {subject.chapterById.get(cq.ch)?.title}
+      </p>
+      {page.stem ? (
+        <div className="border-l-2 border-black pl-3 text-neutral-800">
+          <p className="mb-0.5 text-[11px] font-semibold text-neutral-500">উদ্দীপক</p>
+          <RichText text={cq.stem} />
+        </div>
+      ) : (
+        <p className="line-clamp-2 text-[12px] text-neutral-500">
+          <RichText text={cq.stem.split("\n")[0]} />
+        </p>
+      )}
+      {page.parts.map((i) => {
+        const p = cq.parts[i]
+        return (
+          <div key={i} className="border-b border-neutral-200 pb-3 last:border-0">
+            <p className="font-semibold">
+              {LABELS[i]}. <RichText text={p.q} />
+            </p>
+            <div className="mt-1 text-neutral-700">
+              <RichText text={p.a} />
+            </div>
+            {p.tip && (
+              <div className="mt-2 rounded-md border border-dashed border-black px-3 py-2 text-[13px]">
+                <RichText text={p.tip} />
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {page.link && cq.link && (
+        <div className="border-l-2 border-black pl-3">
+          <p className="text-[11px] font-semibold text-neutral-500">উদ্দীপক ↔ পাঠ্য সংযোগ</p>
+          <RichText text={cq.link} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Break({ subject, k, onDone }: { subject: Subject; k: number; onDone: () => Promise<unknown> }) {
+  const pages = subject.breakPages(k)
+  const key = `ssc-boost-break-${subject.id}-${k}`
+  const [page, setPage] = useState(0)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const p = Number(store(key))
+    if (p > 0 && p < pages.length) setPage(p)
+  }, [key, pages.length])
+
+  const go = (p: number) => {
+    setPage(p)
+    store(key, String(p))
+  }
+
+  const cur = pages[page]
+  const last = page === pages.length - 1
+  return (
+    <>
+      <div className="mb-2 shrink-0">
+        <p className="text-xs text-neutral-500">
+          বিরতি {bn(k)}/{bn(BREAKS)} · পৃষ্ঠা {bn(page + 1)}/{bn(pages.length)}
+        </p>
+        <h2 className="text-lg font-bold">{cur.title}</h2>
+      </div>
+      <BreakView subject={subject} page={cur} />
       <div className="mt-3 flex shrink-0 gap-2">
         <Button variant="outline" className="h-12 flex-1 text-base" disabled={page === 0} onClick={() => go(page - 1)}>
           আগের
@@ -331,40 +585,21 @@ function Break({ k, onDone }: { k: number; onDone: () => Promise<void> }) {
   )
 }
 
-function Done({ state, onRestart }: { state: State; onRestart: () => Promise<void> }) {
-  const isRight = (id: number) => state.answers[id] === mcqById.get(id)!.a
+function Done({ subject, state, onRestart }: { subject: Subject; state: State; onRestart: () => Promise<unknown> }) {
+  const isRight = (id: number) => state.answers[id] === subject.mcqById.get(id)!.a
   const wrong = state.order.filter((id) => state.answers[id] !== undefined && !isRight(id))
   const correct = state.order.filter(isRight).length
   const [i, setI] = useState(-1)
   const [confirm, setConfirm] = useState(false)
 
   if (i >= 0 && wrong.length > 0) {
-    const q = mcqById.get(wrong[i])!
-    const mine = state.answers[q.id]
+    const q = subject.mcqById.get(wrong[i])!
     return (
       <>
-        <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", sizeFor(q))}>
-          <QuestionBody q={q} label={`ভুল ${bn(i + 1)}/${bn(wrong.length)}`} />
-          <div className="flex flex-col gap-2">
-            {q.opts.map((o, j) => (
-              <div
-                key={j}
-                className={cn(
-                  "flex items-start gap-3 rounded-lg border px-3 py-2.5 leading-snug",
-                  j === q.a
-                    ? "border-black bg-black text-white"
-                    : j === mine
-                      ? "border-dashed border-black"
-                      : "border-neutral-200 text-neutral-500",
-                )}
-              >
-                <span className="w-5 shrink-0">{LABELS[j]}</span>
-                <span className={cn(j === mine && j !== q.a && "line-through")}>{o}</span>
-                {j === q.a && <span className="ml-auto shrink-0 text-xs">সঠিক</span>}
-                {j === mine && <span className="ml-auto shrink-0 text-xs">তোমার</span>}
-              </div>
-            ))}
-          </div>
+        <div className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", sizeFor(q, q.ex?.length ?? 0))}>
+          <QuestionBody subject={subject} q={q} label={`ভুল ${bn(i + 1)}/${bn(wrong.length)}`} />
+          <Options q={q} mine={state.answers[q.id]} />
+          <Explanation q={q} />
         </div>
         <div className="mt-3 flex shrink-0 gap-2">
           <Button variant="outline" className="h-12 flex-1" onClick={() => setI(i - 1)}>
@@ -382,7 +617,7 @@ function Done({ state, onRestart }: { state: State; onRestart: () => Promise<voi
     <>
       <div className="flex flex-1 flex-col items-center justify-center text-center">
         <p className="text-5xl font-bold">Done</p>
-        <p className="mt-2 text-sm text-neutral-500">পরীক্ষা শেষ হয়েছে</p>
+        <p className="mt-2 text-sm text-neutral-500">{subject.title} পরীক্ষা শেষ হয়েছে</p>
         <Separator className="my-6 w-24" />
         <p className="text-4xl font-bold tabular-nums">
           {bn(correct)}

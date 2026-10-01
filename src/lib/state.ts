@@ -1,5 +1,5 @@
 import { sql } from "@/lib/db"
-import { mcqs, MCQ_TOTAL } from "@/lib/content"
+import { isSubject, subjectById, type Subject, type SubjectId } from "@/lib/content"
 
 export type DeviceState = {
   order: number[]
@@ -9,25 +9,20 @@ export type DeviceState = {
   answers: Record<number, number>
 }
 
-function shuffled(): number[] {
-  const ids = mcqs.map((m) => m.id)
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
-  }
-  return ids.slice(0, MCQ_TOTAL)
-}
+// Each subject keeps its own progress row, keyed "<subject>:<device>".
+export const dbKey = (subject: SubjectId, deviceId: string) => `${subject}:${deviceId}`
 
-export async function getState(deviceId: string): Promise<DeviceState> {
-  let rows = await sql`SELECT q_order, mcq_index, break_done, finished_at FROM devices WHERE id = ${deviceId}`
+export async function getState(subject: Subject, deviceId: string): Promise<DeviceState> {
+  const key = dbKey(subject.id, deviceId)
+  let rows = await sql`SELECT q_order, mcq_index, break_done, finished_at FROM devices WHERE id = ${key}`
   if (rows.length === 0) {
     rows = await sql`
-      INSERT INTO devices (id, q_order) VALUES (${deviceId}, ${shuffled()})
+      INSERT INTO devices (id, q_order) VALUES (${key}, ${subject.order})
       ON CONFLICT (id) DO UPDATE SET updated_at = devices.updated_at
       RETURNING q_order, mcq_index, break_done, finished_at`
   }
   const d = rows[0]
-  const ans = await sql`SELECT q_id, choice FROM answers WHERE device_id = ${deviceId}`
+  const ans = await sql`SELECT q_id, choice FROM answers WHERE device_id = ${key}`
   return {
     order: d.q_order,
     mcqIndex: d.mcq_index,
@@ -39,4 +34,10 @@ export async function getState(deviceId: string): Promise<DeviceState> {
 
 export function validId(id: unknown): id is string {
   return typeof id === "string" && /^[a-zA-Z0-9-]{8,64}$/.test(id)
+}
+
+// Parses the common { subject, deviceId } part of every request body.
+export function parse(body: { subject?: unknown; deviceId?: unknown }) {
+  if (!validId(body.deviceId) || !isSubject(body.subject)) return null
+  return { subject: subjectById.get(body.subject)!, deviceId: body.deviceId }
 }

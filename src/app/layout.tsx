@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next"
 import { Hind_Siliguri } from "next/font/google"
+import "katex/dist/katex.min.css"
 import "./globals.css"
 
 const hind = Hind_Siliguri({
@@ -9,8 +10,8 @@ const hind = Hind_Siliguri({
 })
 
 export const metadata: Metadata = {
-  title: "বাংলা ১ম পত্র — SSC 2025 MCQ",
-  description: "SSC বাংলা ১ম পত্র: ৫০০ গুরুত্বপূর্ণ MCQ ও জ্ঞানমূলক-অনুধাবনমূলক প্রশ্ন",
+  title: "SSC 2025 — বাংলা ১ম পত্র ও সাধারণ গণিত MCQ",
+  description: "SSC 2025: বাংলা ১ম পত্র ও সাধারণ গণিতের ৫০০টি করে গুরুত্বপূর্ণ MCQ, সৃজনশীল ও সমাধান",
 }
 
 export const viewport: Viewport = {

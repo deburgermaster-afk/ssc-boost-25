@@ -1,20 +1,33 @@
-# SSC Boost 25 — বাংলা ১ম পত্র MCQ
+# SSC Boost 25 — বাংলা ১ম পত্র ও সাধারণ গণিত MCQ
 
-Mobile-first practice app for SSC বাংলা ১ম পত্র (Class 9–10 *মাধ্যমিক বাংলা সাহিত্য*), covering only the
-32 chapters highlighted for the exam (17 গদ্য + 15 কবিতা).
+Mobile-first SSC 2025 practice app with two subjects on the home screen. Each subject keeps its own
+progress per device in Postgres (Neon); refreshing resumes exactly where you left off.
 
-- **500 MCQs** per run, drawn at random from a pool of 617 (সাধারণ, বহুপদী সমাপ্তিসূচক, অভিন্ন তথ্যভিত্তিক).
-  Forward-only, no feedback until the end.
-- **Break after every 50 MCQs**: 30 জ্ঞানমূলক (ক) + 10 অনুধাবনমূলক (খ) with answers shown — 300 ক + 100 খ in total.
-- **Progress saved per device** in Postgres (Neon); refreshing resumes exactly where you left off.
+### বাংলা ১ম পত্র
+Class 9–10 *মাধ্যমিক বাংলা সাহিত্য*, only the 32 chapters highlighted for the exam (17 গদ্য + 15 কবিতা).
+
+- **500 MCQs, chapter-wise** (সাধারণ, বহুপদী সমাপ্তিসূচক, অভিন্ন তথ্যভিত্তিক). Forward-only, answers reviewed at the end.
+- **Break after every 50 MCQs**: 30 জ্ঞানমূলক (ক) + 10 অনুধাবনমূলক (খ) + 10 সৃজনশীল with গ/ঘ answers and the
+  উদ্দীপক ↔ পাঠ্য connection.
+
+### সাধারণ গণিত
+Chapters 17 (পরিসংখ্যান), 9, 2, 10, 11, 13, 16 — in that order.
+
+- **500 MCQs, chapter-wise**, with the right answer and a worked explanation (math rendered with KaTeX,
+  Bangla numerals) shown immediately after each answer.
+- **Break after every 50 MCQs**: 5 সৃজনশীল with ক/খ/গ/ঘ solutions; গ and ঘ include which সূত্র to use, how to
+  recognise it, and the easiest way to apply it.
+
+### Common
 - **Done screen** with score and a review of wrong answers.
-- **Admin** at `/admin` (username `admin`, password `admin`) — device count, progress and scores.
+- **Admin** at `/admin` (username `admin`, password `admin`) — progress and scores per device and subject.
 
 ## Content
 
-- `book/full.txt` — OCR text of the NCTB book (Tesseract, Bangla), `book/chapters/*.txt` — per chapter.
-- `content/<chapter>.txt` — the questions, one per line (format documented in `scripts/build-content.mjs`).
-- `npm run content` regenerates `src/data/mcq.json` and `src/data/short.json`.
+- `book/full.txt` — OCR text of the NCTB Bangla book (Tesseract), `book/chapters/*.txt` — per chapter.
+- `content/<chapter>.txt` (+ `*.cq.txt`) — Bangla questions, one per line (format in `scripts/build-content.mjs`).
+- `npm run content` regenerates `src/data/bangla/*.json` and `src/data/math/*.json`
+  (math questions are generated with computed answers by `scripts/build-math.mjs`).
 
 ## Run locally
 

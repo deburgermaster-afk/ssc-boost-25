@@ -13,7 +13,7 @@ export async function POST(req: Request) {
            coalesce(sum(mcq_index), 0)::int AS answered
     FROM devices`
   const devices = await sql`
-    SELECT d.id, d.mcq_index, d.break_done, d.finished_at, d.updated_at,
+    SELECT split_part(d.id, ':', 1) AS subject, split_part(d.id, ':', 2) AS id, d.mcq_index, d.break_done, d.finished_at, d.updated_at,
            count(a.*) FILTER (WHERE a.correct)::int AS correct
     FROM devices d LEFT JOIN answers a ON a.device_id = d.id
     GROUP BY d.id ORDER BY d.updated_at DESC LIMIT 200`

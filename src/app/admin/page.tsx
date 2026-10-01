@@ -6,10 +6,15 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { BLOCK, MCQ_TOTAL, bn } from "@/lib/content"
+
+// Kept local so the admin bundle doesn't pull in the question data.
+const MCQ_TOTAL = 500
+const BLOCK = 50
+const bn = (n: number | string) => String(n).replace(/\d/g, (d) => "০১২৩৪৫৬৭৮৯"[+d])
 
 type Totals = { devices: number; finished: number; active_today: number; answered: number }
 type Device = {
+  subject: string
   id: string
   mcq_index: number
   break_done: number
@@ -54,7 +59,7 @@ export default function Admin() {
     return (
       <main className="mx-auto flex h-dvh w-full max-w-md flex-col justify-center px-6">
         <h1 className="text-2xl font-bold">অ্যাডমিন</h1>
-        <p className="mb-6 text-sm text-neutral-500">বাংলা ১ম পত্র MCQ</p>
+        <p className="mb-6 text-sm text-neutral-500">SSC 2025 · বাংলা ১ম পত্র ও সাধারণ গণিত</p>
         <form
           className="flex flex-col gap-4"
           onSubmit={(e) => {
@@ -83,7 +88,7 @@ export default function Admin() {
   const pages = Math.max(1, Math.ceil(devices.length / PER_PAGE))
   const rows = devices.slice(page * PER_PAGE, (page + 1) * PER_PAGE)
   const stats = [
-    ["মোট ডিভাইস", totals.devices],
+    ["মোট প্রগ্রেস", totals.devices],
     ["শেষ করেছে", totals.finished],
     ["আজ সক্রিয়", totals.active_today],
     ["মোট উত্তর", totals.answered],
@@ -111,6 +116,7 @@ export default function Admin() {
           <TableHeader>
             <TableRow>
               <TableHead>ডিভাইস</TableHead>
+              <TableHead>বিষয়</TableHead>
               <TableHead className="text-right">উত্তর</TableHead>
               <TableHead className="text-right">সঠিক</TableHead>
               <TableHead className="text-right">অবস্থা</TableHead>
@@ -119,8 +125,9 @@ export default function Admin() {
           </TableHeader>
           <TableBody>
             {rows.map((d) => (
-              <TableRow key={d.id}>
+              <TableRow key={d.subject + d.id}>
                 <TableCell className="font-mono">{d.id.slice(0, 6)}</TableCell>
+                <TableCell>{d.subject === "math" ? "গণিত" : "বাংলা"}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {bn(d.mcq_index)}/{bn(MCQ_TOTAL)}
                 </TableCell>
@@ -139,7 +146,7 @@ export default function Admin() {
             ))}
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="py-8 text-center text-neutral-500">
+                <TableCell colSpan={6} className="py-8 text-center text-neutral-500">
                   এখনো কেউ শুরু করেনি
                 </TableCell>
               </TableRow>
