@@ -18,7 +18,8 @@ export type Mcq = {
   ex?: string
 }
 export type Short = { id: number; ch: string; kind: "ক" | "খ"; q: string; a: string }
-export type CqPart = { q: string; a: string; tip?: string }
+export type GuideStep = { t: string; b: string }
+export type CqPart = { q: string; a: string; tip?: string; guide?: GuideStep[] }
 export type Cq = { id: number; ch: string; stem: string; parts: CqPart[]; link?: string }
 
 // One screen of a break. A CQ is split over several pages (stem + ক/খ, then

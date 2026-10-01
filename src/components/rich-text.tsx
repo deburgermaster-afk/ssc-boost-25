@@ -10,7 +10,27 @@ function tex(src: string, displayMode = false) {
   return katex.renderToString(bn(src), { throwOnError: false, strict: false, output: "html", displayMode })
 }
 
-function Inline({ text }: { text: string }) {
+// `[[value|label]]` marks a value from the উদ্দীপক: blue bold, with a small tag
+// saying which symbol of the formula it is.
+function Inline({ text }: { text: string }): React.ReactNode {
+  if (/\[\[[^\]|]*\|[^\]]*\]\]/.test(text)) {
+    return text.split(/(\[\[[^\]|]*\|[^\]]*\]\])/g).map((part, i) => {
+      const m = /^\[\[([^\]|]*)\|([^\]]*)\]\]$/.exec(part)
+      if (!m) return <Inline key={i} text={part} />
+      return (
+        <span key={i} className="mx-0.5 inline-flex items-baseline gap-0.5 whitespace-nowrap">
+          <span className="font-bold text-blue-700 underline decoration-blue-700/40 underline-offset-2">
+            <Inline text={m[1]} />
+          </span>
+          {m[2] && (
+            <span className="rounded border border-blue-700/40 px-1 text-[0.72em] leading-tight font-semibold text-blue-700">
+              <Inline text={m[2]} />
+            </span>
+          )}
+        </span>
+      )
+    })
+  }
   return text.split(/(\$[^$]+\$)/g).map((part, i) =>
     part.startsWith("$") && part.endsWith("$") && part.length > 1 ? (
       <span key={i} dangerouslySetInnerHTML={{ __html: tex(part.slice(1, -1)) }} />
@@ -54,9 +74,10 @@ function parse(text: string): Block[] {
   for (const line of text.split("\n")) {
     const l = line.trim()
     if (l.startsWith("|")) {
+      // split on "|" but not inside [[value|label]] markers
       const cells = l
         .replace(/^\||\|$/g, "")
-        .split("|")
+        .split(/\|(?![^[]*\]\])/)
         .map((c) => c.trim())
       const prev = out[out.length - 1]
       if (prev?.k === "table") prev.rows.push(cells)

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { Guide } from "@/components/guide"
 import { RichBlock, RichText } from "@/components/rich-text"
 import {
   BLOCK,
@@ -518,6 +519,8 @@ function BreakView({ subject, page }: { subject: Subject; page: BreakPage }) {
             <p className="font-semibold">
               {LABELS[i]}. <RichText text={p.q} />
             </p>
+            {p.guide && <Guide steps={p.guide} />}
+            {p.guide && <p className="mt-3 text-[11px] font-semibold text-neutral-500">সম্পূর্ণ সমাধান</p>}
             <RichBlock text={p.a} className={cn("mt-1", full ? "text-blue-700" : "text-neutral-700")} />
             {p.tip && (
               <div className={cn("mt-2 rounded-md border border-dashed px-3 py-2 text-[13px]", full ? "border-blue-700 text-blue-700" : "border-black")}>

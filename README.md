@@ -17,7 +17,7 @@ Chapters 17 (পরিসংখ্যান), 9, 2, 10, 11, 13, 16 — in that o
   answer: one step per line (KaTeX, Bangla numerals), tables, geometry figures (triangles, heights &
   distances, Venn diagrams, shapes and solids) and a "কোনটা কী ধরবে" legend explaining every symbol.
 - **Break after every 50 MCQs**: 5 সৃজনশীল, each on one scrollable page with the full worked solution in blue; গ and ঘ include which সূত্র to use, how to
-  recognise it, and the easiest way to apply it.
+  recognise it, and the easiest way to apply it, plus a step-by-step guide (↓ flow): which formula → the উদ্দীপক with the needed values marked in blue → plug in → answer → how the গ result is used in ঘ.
 
 ### Common
 - **Done screen** with score and a review of wrong answers.
